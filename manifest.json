@@ -1,0 +1,27 @@
+{
+  "name": "宿洗寵物 Soosi Pet 數位契約",
+  "short_name": "宿洗 Soosi",
+  "description": "宿洗寵物 Soosi Pet 數位化服務契約系統",
+  "start_url": "./soosi.html",
+  "display": "standalone",
+  "background_color": "#F9F7F2",
+  "theme_color": "#6A8D73",
+  "icons": [
+    {
+      "src": "nav.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "nav.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "nav.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

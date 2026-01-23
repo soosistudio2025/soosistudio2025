@@ -5,9 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <meta name="format-detection" content="telephone=no">
 
-    <title>宿洗寵物 Soosi Pet | 預約暨契約系統</title>
+<title>宿洗寵物 Soosi Pet | 數位契約系統</title>
     
-    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="宿洗 Soosi">
+    <link rel="apple-touch-icon" href="nav.png">
+    <link rel="icon" type="image/png" href="nav.png">
     <meta name="theme-color" content="#6A8D73"> 
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -201,16 +206,41 @@
                 }
             }, [isOpen]);
 
+// 自動更新與偵測腳本
             const handleScroll = (e) => {
                 const { scrollTop, scrollHeight, clientHeight } = e.target;
-                if (scrollHeight - scrollTop - clientHeight < 50) setCanAgree(true);
+                // 當距離底部小於 50px 時，自動更新按鈕為可點擊狀態
+                if (scrollHeight - scrollTop - clientHeight < 50) {
+                    setCanAgree(true);
+                }
             };
+
+            // 視窗開啟時的自動校準邏輯
+            useEffect(() => {
+                if (isOpen) {
+                    setCanAgree(false); // 每次開啟重新計算
+                    document.body.style.overflow = 'hidden'; 
+                    
+                    // 延遲偵測：若內容本身就比視窗短，自動解鎖
+                    const timer = setTimeout(() => {
+                        if (contentRef.current) {
+                            const { scrollHeight, clientHeight } = contentRef.current;
+                            if (scrollHeight <= clientHeight + 10) {
+                                setCanAgree(true);
+                            }
+                        }
+                    }, 400); 
+                    return () => clearTimeout(timer);
+                } else {
+                    document.body.style.overflow = '';
+                }
+            }, [isOpen]);
 
             if (!isOpen) return null;
 
-            return (
-                <div className="fixed inset-0 z-[150] bg-soosi-dark/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-                    <div className="w-full max-w-lg bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10">
+return (
+                <div className="fixed inset-0 z-[150] bg-soosi-dark/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="px-6 py-4 bg-soosi-green text-white flex justify-between items-center shrink-0">
                             <h3 className="text-lg font-black tracking-wider flex items-center gap-2"><Icon name="file-text" size={18}/> {title}</h3>
                             <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><Icon name="x" size={20} /></button>
@@ -232,7 +262,154 @@
             );
         };
 
+// --- 1. 定義價目表資料 ---
+        const PRICE_DATA = {
+            dogs: [
+                { category: '大型犬 (短毛/中長毛)', items: [
+                    { breed: '拉不拉多', weight: '5kg以下', small: 600, full: 1200 },
+                    { breed: '黃金獵犬', weight: '5-10kg', small: 900, full: 1800 },
+                    { breed: '威瑪犬', weight: '10-20kg', small: 1000, full: 2000 },
+                    { breed: '大丹狗', weight: '20-30kg', small: 1400, full: 2800 },
+                    { breed: '高山犬', weight: '30-40kg', small: 1800, full: 3600 },
+                    { breed: '羅威納犬', weight: '40kg以上', small: 2000, full: 4000 },
+                ]},
+                { category: '大型犬 (長毛/雙層毛)', items: [
+                    { breed: '標準貴賓', weight: '5kg以下', small: 600, full: 1500 },
+                    { breed: '哈士奇', weight: '5-10kg', small: 1000, full: 2500 },
+                    { breed: '阿拉斯加', weight: '10-20kg', small: 1800, full: 3500 },
+                    { breed: '古代牧羊犬', weight: '20-30kg', small: 2000, full: 4500 },
+                    { breed: '鬆獅犬', weight: '30-40kg', small: 2200, full: 5500 },
+                    { breed: '秋田犬', weight: '40kg以上', small: 2400, full: 6500 },
+                ]},
+                { category: '小型犬 / 中型', items: [
+                    { breed: '吉娃娃', weight: '2kg以下', small: 500, full: 800 },
+                    { breed: '臘腸', weight: '2-5kg', small: 500, full: 1000 },
+                    { breed: '巴戈', weight: '5-10kg', small: 600, full: 1200 },
+                    { breed: '法鬥', weight: '10-15kg', small: 800, full: 1500 },
+                ]}
+            ],
+            cats: [
+                { type: '幼貓 (2-6個月)', weight: '-', small: 600, full: '-' },
+                { type: '短毛貓', weight: '2-6kg', small: 800, full: 1600 },
+                { type: '中長毛貓', weight: '2-6kg', small: 1000, full: 2000 },
+                { type: '長毛貓', weight: '2-6kg', small: 1200, full: 2400 },
+            ]
+        };
+
+        // --- 2. 定義價目表視窗組件 ---
+        const PriceListModal = ({ isOpen, onClose }) => {
+            const [tab, setTab] = React.useState('dog');
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[160] bg-soosi-dark/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+                    <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                        <div className="px-6 py-4 bg-soosi-wood text-white flex justify-between items-center shrink-0">
+                            <h3 className="text-lg font-black tracking-wider flex items-center gap-2"><Icon name="dollar-sign" size={18}/> 美容價目表</h3>
+                            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><Icon name="x" size={20} /></button>
+                        </div>
+                        <div className="flex p-2 gap-2 bg-gray-50 border-b">
+                            <button onClick={() => setTab('dog')} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${tab === 'dog' ? 'bg-soosi-wood text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}>🐶 狗狗價目</button>
+                            <button onClick={() => setTab('cat')} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${tab === 'cat' ? 'bg-soosi-wood text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}>🐱 貓咪價目</button>
+                        </div>
+                        <div className="overflow-y-auto p-4 space-y-6 bg-[#F9F7F2]">
+                            {tab === 'dog' && PRICE_DATA.dogs.map((group, idx) => (
+                                <div key={idx} className="bg-white rounded-xl shadow-sm border border-soosi-wood/10 overflow-hidden">
+                                    <div className="bg-soosi-wood/10 px-4 py-2 font-bold text-soosi-wood text-sm">{group.category}</div>
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                                            <tr><th className="px-4 py-2">犬種</th><th className="px-4 py-2">體重</th><th className="px-4 py-2 text-right">小美容</th><th className="px-4 py-2 text-right">大美容</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 text-soosi-dark">
+                                            {group.items.map((item, i) => (
+                                                <tr key={i} className="hover:bg-gray-50">
+                                                    <td className="px-4 py-3 font-bold">{item.breed}</td>
+                                                    <td className="px-4 py-3 text-xs text-gray-500">{item.weight}</td>
+                                                    <td className="px-4 py-3 text-right font-mono">${item.small}</td>
+                                                    <td className="px-4 py-3 text-right font-mono font-bold text-soosi-wood">${item.full}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))}
+                            {tab === 'cat' && (
+                                <div className="bg-white rounded-xl shadow-sm border border-soosi-wood/10 overflow-hidden">
+                                    <div className="bg-soosi-wood/10 px-4 py-2 font-bold text-soosi-wood text-sm">貓咪服務</div>
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                                            <tr><th className="px-4 py-2">類別</th><th className="px-4 py-2">體重</th><th className="px-4 py-2 text-right">小美容</th><th className="px-4 py-2 text-right">大美容</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 text-soosi-dark">
+                                            {PRICE_DATA.cats.map((item, i) => (
+                                                <tr key={i} className="hover:bg-gray-50">
+                                                    <td className="px-4 py-3 font-bold">{item.type}</td>
+                                                    <td className="px-4 py-3 text-xs text-gray-500">{item.weight}</td>
+                                                    <td className="px-4 py-3 text-right font-mono">{item.small === '-' ? '-' : `$${item.small}`}</td>
+                                                    <td className="px-4 py-3 text-right font-mono font-bold text-soosi-wood">{item.full === '-' ? '-' : `$${item.full}`}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    <div className="p-3 bg-yellow-50 text-yellow-800 text-xs border-t border-yellow-100">💡 貓咪超過 6 公斤，每增加 1 公斤加收 $100。</div>
+                                </div>
+                            )}
+                            <div className="text-xs text-gray-400 text-center pb-2">* 實際收費以現場毛量、毛質及體型評估為準。<br/>* 若發現跳蚤壁蝨、嚴重打結需額外收費。</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };// --- 住宿價目表 Modal (圖片版) ---
+        const BoardingPriceModal = ({ isOpen, onClose }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[160] bg-soosi-dark/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+                    <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="px-6 py-4 bg-soosi-green text-white flex justify-between items-center shrink-0">
+                            <h3 className="text-lg font-black tracking-wider flex items-center gap-2"><Icon name="image" size={18}/> 住宿價目表</h3>
+                            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><Icon name="x" size={20} /></button>
+                        </div>
+                        
+                        {/* 圖片內容區 */}
+                        <div className="overflow-y-auto p-4 bg-[#F9F7F2] space-y-4">
+                            {/* 狗狗價目表 */}
+                            <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100">
+                                <div className="text-center text-xs font-bold text-gray-400 mb-2">- 狗狗住宿 -</div>
+                                {/* 檔名對應 dogprice.jpg (請確認副檔名是 jpg 不是 jgp) */}
+                                <img src="./dogprice.jpg" alt="狗狗住宿價目表" className="w-full h-auto rounded-lg" onError={(e) => e.target.style.display = 'none'} />
+                            </div>
+                            
+                            {/* 貓咪價目表 */}
+                            <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100">
+                                <div className="text-center text-xs font-bold text-gray-400 mb-2">- 貓咪住宿 -</div>
+                                {/* 檔名對應 catprice.jpg */}
+                                <img src="./catprice.jpg" alt="貓咪住宿價目表" className="w-full h-auto rounded-lg" onError={(e) => e.target.style.display = 'none'} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
         const App = () => {
+    // 2. 通用輸入處理 (文字、日期、單選)
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    // 3. 複選框處理 (針對籠內訓練)
+    const handleCheckboxChange = (e, field) => {
+        const { value, checked } = e.target;
+        setFormData(prev => {
+            const currentValues = prev[field] || [];
+            if (checked) {
+                return { ...prev, [field]: [...currentValues, value] };
+            } else {
+                return { ...prev, [field]: currentValues.filter(v => v !== value) };
+            }
+        });
+    };
+            
             const [view, setView] = useState('entry'); 
             const [isBoarding, setIsBoarding] = useState(false);
             const [isSubmitting, setIsSubmitting] = useState(false);
@@ -302,12 +479,35 @@ const [activeModal, setActiveModal] = useState(null);
                 return ageRisk || medicalRisk;
             }, [actualAge, formData.medical_status]);
 
-            const riskType = useMemo(() => {
+const riskType = useMemo(() => {
                 if (formData.medical_status === '有') return 'medical';
                 if (actualAge >= 8) return 'senior';
                 if (actualAge > 0 && actualAge < 0.42) return 'puppy';
                 return null;
             }, [actualAge, formData.medical_status]);
+
+            // --- 新增：住宿天數計算 ---
+            const stayDuration = useMemo(() => {
+                if (!formData.checkInDate || !formData.checkOutDate) return null;
+                const start = new Date(formData.checkInDate);
+                const end = new Date(formData.checkOutDate);
+                const diffTime = end - start;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays > 0 ? diffDays : null;
+            }, [formData.checkInDate, formData.checkOutDate]);
+
+            // --- 新增：美容時段產生 (每半小時) ---
+            const timeSlots = useMemo(() => {
+                const slots = [];
+                const startHour = 10; // 10:00 開始
+                const endHour = 20;   // 20:00 結束
+                for (let i = startHour; i < endHour; i++) {
+                    slots.push(`${i}:00`);
+                    slots.push(`${i}:30`);
+                }
+                slots.push(`${endHour}:00`);
+                return slots;
+            }, []);
             
 // 條款完成檢查 (邏輯更新：住宿需同時完成4項，美容需完成2項)
             const allTermsRead = useMemo(() => {
@@ -429,12 +629,11 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                             <div className="grid grid-cols-1 w-full gap-5">
                                 <button onClick={goGrooming} 
                                     className="glass-card p-6 flex items-center gap-5 group hover:bg-white/90 active:scale-[0.98] border-l-8 border-soosi-green transition-all relative overflow-hidden">
-                                    <div className="absolute right-0 top-0 opacity-10 transform translate-x-1/4 -translate-y-1/4"><Icon name="scissors" size={120} className="text-soosi-green"/></div>
                                     <div className="w-16 h-16 rounded-2xl bg-soosi-green/10 flex items-center justify-center text-soosi-green group-hover:bg-soosi-green group-hover:text-white transition-colors shadow-sm z-10">
                                         <Icon name="scissors" size={32} />
                                     </div>
                                     <div className="text-left flex-1 z-10">
-                                        <h3 className="text-xl font-black text-soosi-dark mb-1">美容安親</h3>
+                                        <h3 className="text-xl font-black text-soosi-dark mb-1">洗澡美容</h3>
                                         <p className="text-xs text-gray-500 font-medium">Grooming Service</p>
                                     </div>
                                     <div className="text-soosi-green z-10"><Icon name="arrow-right" /></div>
@@ -442,12 +641,11 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
 
                                 <button onClick={goBoarding} 
                                     className="glass-card p-6 flex items-center gap-5 group hover:bg-white/90 active:scale-[0.98] border-l-8 border-soosi-wood transition-all relative overflow-hidden">
-                                    <div className="absolute right-0 top-0 opacity-10 transform translate-x-1/4 -translate-y-1/4"><Icon name="home" size={120} className="text-soosi-wood"/></div>
                                     <div className="w-16 h-16 rounded-2xl bg-soosi-wood/10 flex items-center justify-center text-soosi-wood group-hover:bg-soosi-wood group-hover:text-white transition-colors shadow-sm z-10">
                                         <Icon name="home" size={32} />
                                     </div>
                                     <div className="text-left flex-1 z-10">
-                                        <h3 className="text-xl font-black text-soosi-dark mb-1">寵物住宿</h3>
+                                        <h3 className="text-xl font-black text-soosi-dark mb-1">安親住宿</h3>
                                         <p className="text-xs text-gray-500 font-medium">Pet Boarding</p>
                                     </div>
                                     <div className="text-soosi-wood z-10"><Icon name="arrow-right" /></div>
@@ -495,9 +693,25 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                 <img src="nav.png" alt="Logo" className="w-12 h-12 object-contain" />
                                 <div className="font-black text-lg text-soosi-dark tracking-wide">宿洗 Soosi</div>
                             </div>
-                            <button onClick={goHome} className="text-xs font-bold text-soosi-wood hover:bg-soosi-wood/10 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1">
-                                <Icon name="arrow-left" size={14}/> 返回首頁
-                            </button>
+<div className="flex items-center gap-2">
+                                {/* 美容模式：顯示文字版價目表 */}
+                                {!isBoarding && (
+                                    <button onClick={() => setActiveModal('priceList')} className="text-xs font-bold text-white bg-soosi-wood px-3 py-1.5 rounded-full shadow-sm hover:bg-soosi-wood/90 transition-all flex items-center gap-1">
+                                        <Icon name="dollar-sign" size={14}/> 價目表
+                                    </button>
+                                )}
+
+                                {/* 住宿模式：顯示圖片版價目表 */}
+                                {isBoarding && (
+                                    <button onClick={() => setActiveModal('boardingPrice')} className="text-xs font-bold text-white bg-soosi-green px-3 py-1.5 rounded-full shadow-sm hover:bg-soosi-green/90 transition-all flex items-center gap-1">
+                                        <Icon name="image" size={14}/> 價目表
+                                    </button>
+                                )}
+
+                                <button onClick={goHome} className="text-xs font-bold text-soosi-wood hover:bg-soosi-wood/10 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1">
+                                    <Icon name="arrow-left" size={14}/> 返回首頁
+                                </button>
+                            </div>
                         </div>
                     </nav>
 
@@ -580,7 +794,55 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                 <InputGroup label="緊急連絡電話" required error={errors.emergency_phone} id="emergency_phone">
                                     <input type="tel" value={formData.emergency_phone} onChange={e=>handleChange('emergency_phone', e.target.value)} className={`w-full cute-input px-4 py-3 border-red-100 bg-red-50/20 ${errors.emergency_phone ? 'input-error' : ''}`} />
                                 </InputGroup>
+</div>
+                        </section>
+
+                        {/* 新增：預約時間區塊 (放在寵物資料上方) */}
+                        <section className="cute-card p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+                            <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
+                                <span className="text-2xl">📅</span>
+                                <h3 className="text-lg font-black text-soosi-dark">
+                                    {isBoarding ? "住宿時間預約" : "美容預約資訊"}
+                                </h3>
                             </div>
+
+                            {isBoarding ? (
+                                /* 住宿模式顯示 */
+                                <div className="space-y-4">
+                                    <div className="grid md:grid-cols-2 gap-5">
+                                        <InputGroup label="入住日期" required error={errors.checkInDate} id="checkInDate">
+                                            <input type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
+                                        </InputGroup>
+                                        <InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
+                                            <input type="date" name="checkOutDate" value={formData.checkOutDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} />
+                                        </InputGroup>
+                                    </div>
+                                    {/* 自動計算晚數 Badge */}
+                                    {stayDuration && (
+                                        <div className="flex justify-center pt-2 animate-in zoom-in duration-300">
+                                            <div className="bg-gradient-to-r from-soosi-wood to-[#7A5E47] text-white px-6 py-2.5 rounded-full font-bold shadow-lg flex items-center gap-2 transform hover:scale-105 transition-transform">
+                                                <Icon name="moon" size={18} className="text-soosi-accent" />
+                                                <span>共入住 <span className="text-soosi-accent text-lg">{stayDuration}</span> 晚</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* 美容模式顯示 */
+                                <div className="grid md:grid-cols-2 gap-5">
+                                    <InputGroup label="預約日期" required error={errors.bookingDate} id="bookingDate">
+                                        <input type="date" name="bookingDate" value={formData.bookingDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.bookingDate ? 'input-error' : ''}`} />
+                                    </InputGroup>
+                                    <InputGroup label="預約時段" required error={errors.bookingTime} id="bookingTime">
+                                        <select name="bookingTime" value={formData.bookingTime || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 appearance-none ${errors.bookingTime ? 'input-error' : ''}`}>
+                                            <option value="">請選擇時段</option>
+                                            {timeSlots.map(time => (
+                                                <option key={time} value={time}>{time}</option>
+                                            ))}
+                                        </select>
+                                    </InputGroup>
+                                </div>
+                            )}
                         </section>
 
                         {/* Pet Info */}
@@ -698,31 +960,122 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                     </InputGroup>
                                 </div>
 
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 過往病史</label>
-                                    <div className="flex gap-3 mb-3">
-                                        <PillBtn active={formData.medical_status==='有'} onClick={()=>handleChange('medical_status', '有')}>有</PillBtn>
-                                        <PillBtn active={formData.medical_status==='無'} onClick={()=>handleChange('medical_status', '無')}>無</PillBtn>
+{/* 過往病史區塊：預設紅底並將提醒緊貼標題 */}
+                                <div className="md:col-span-2 p-5 rounded-2xl border bg-red-50 border-red-100 transition-all" id="medical_status">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <label className="text-sm font-bold text-soosi-wood ml-1">
+                                            過往病史
+                                        </label>
+                                        <div className="flex items-center gap-1 text-soosi-red text-[10px] font-black bg-white px-2 py-0.5 rounded-full shadow-sm animate-pulse border border-red-100 shrink-0">
+                                            <Icon name="alert-circle" size={14}/> 請務必如實告知
+                                        </div>
                                     </div>
+
+                                    <div className="flex gap-3 mb-4">
+                                        <PillBtn active={formData.medical_status === '有'} onClick={() => handleChange('medical_status', '有')} className={formData.medical_status === '有' ? 'bg-soosi-red border-soosi-red' : 'bg-white'}>有</PillBtn>
+                                        <PillBtn active={formData.medical_status === '無'} onClick={() => handleChange('medical_status', '無')} className={formData.medical_status === '無' ? '' : 'bg-white'}>無</PillBtn>
+                                    </div>
+                                    
                                     {errors.medical_status && <div className="field-error"><Icon name="alert-circle" size={12}/>{errors.medical_status}</div>}
+
                                     {formData.medical_status === '有' && (
-                                        <div className="space-y-2 bg-red-50 p-4 rounded-xl border border-red-100 animate-in fade-in">
-                                            <p className="text-xs text-soosi-red font-bold">⚠️ 有病史將觸發高風險條款，請詳實填寫。</p>
+                                        <div className="space-y-3 mt-4 pt-4 border-t border-red-200/50 animate-in fade-in">
                                             <div className="flex flex-wrap gap-2">
                                                 {['心臟病','氣喘','氣管塌陷','白內障','癲癇','心絲蟲','皮膚病','其他'].map(v => (
-                                                    <button key={v} type="button" onClick={()=>toggleArray('medical_history', v)}
+                                                    <button key={v} type="button" onClick={() => toggleArray('medical_history', v)}
                                                         className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${formData.medical_history.includes(v) ? 'bg-soosi-wood text-white border-soosi-wood' : 'bg-white text-gray-500 border-gray-200'}`}>
                                                         {v}
                                                     </button>
                                                 ))}
                                             </div>
-                                            {formData.medical_history.includes('其他') && <textarea className="w-full cute-input px-4 py-2 mt-2" placeholder="請說明其他病史..." value={formData.medical_history_other} onChange={e=>handleChange('medical_history_other', e.target.value)} />}
+                                            {formData.medical_history.includes('其他') && <textarea className="w-full cute-input px-4 py-2 mt-2" placeholder="請說明其他病史..." value={formData.medical_history_other} onChange={e => handleChange('medical_history_other', e.target.value)} />}
                                         </div>
                                     )}
                                 </div>
                             </div>
                         </section>
+{/* 住宿專用表單 (其他細節) */}
+                    {isBoarding && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                            
+                            {/* 區塊 2: 基本調查 (Yes/No) */}
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-soosi-green/10 space-y-6">                                <h3 className="font-black text-lg text-soosi-green flex items-center gap-2 border-b border-soosi-green/10 pb-2">
+                                    <Icon name="clipboard" size={20}/> 基本調查
+                                </h3>
 
+                                {[
+                                    { id: 'isBarking', label: '會容易吠叫嗎', required: true, options: ['會', '不會'] },
+                                    { id: 'hasBoardingExp', label: '有住宿過的經驗嗎', required: true, options: ['有', '沒有'] },
+                                    { id: 'isFoodGuarding', label: '會護食嗎', required: true, options: ['會', '不會'] },
+                                    { id: 'useToiletPad', label: '會在尿布墊上上廁所嗎', required: true, options: ['會', '不會'] },
+                                    { id: 'vaccine', label: '每年定期施打疫苗 (請提供疫苗手冊)', required: true, options: ['有', '沒有'] },
+                                    { id: 'deworm', label: '每月定期驅蟲預防', required: true, options: ['有', '無'] },
+                                ].map((q, idx) => (
+                                    <div key={idx} className="space-y-2">
+                                        <label className="text-sm font-bold text-soosi-dark ml-1">{q.label} {q.required && <span className="text-red-500">*</span>}</label>
+                                        <div className="flex gap-4">
+                                            {q.options.map(opt => (
+                                                <label key={opt} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData[q.id] === opt ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                                    <input type="radio" name={q.id} value={opt} checked={formData[q.id] === opt} onChange={handleInputChange} className="hidden" />
+                                                    <span className="font-bold">{opt}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* 籠內訓練 (複選) */}
+                                <div className="space-y-3 pt-2">
+                                    <label className="text-sm font-bold text-soosi-dark ml-1">籠內訓練狀況 (可複選) <span className="text-red-500">*</span></label>
+                                    <div className="bg-orange-50 p-3 rounded-lg text-xs text-orange-800 border border-orange-100 mb-2">
+                                        💡 何謂籠內訓練：能在圍欄或房間內獨立休息，不焦慮、不持續吠叫、不激動衝撞
+                                    </div>
+                                    <div className="space-y-2">
+                                        {[
+                                            '有 平常在家都有在圍欄內或籠子睡覺',
+                                            '有 以前有訓練過 但日常沒有維持',
+                                            '有 但不確認現在能不能適應',
+                                            '沒有 但之前在外住宿 在房間可以適應得很好',
+                                            '從來沒有'
+                                        ].map((opt, i) => (
+                                            <label key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
+                                                <input 
+                                                    type="checkbox" 
+                                                    value={opt} 
+                                                    checked={(formData.crateTraining || []).includes(opt)}
+                                                    onChange={(e) => handleCheckboxChange(e, 'crateTraining')}
+                                                    className="mt-1 w-4 h-4 text-soosi-green border-gray-300 rounded focus:ring-soosi-green" 
+                                                />
+                                                <span className="text-sm text-soosi-dark font-medium leading-relaxed">{opt}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 區塊 3: 詳細文字敘述 */}
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-soosi-green/10 space-y-6">
+                                <h3 className="font-black text-lg text-soosi-green flex items-center gap-2 border-b border-soosi-green/10 pb-2">
+                                    <Icon name="message-square" size={20}/> 狗狗的日常情形及注意事項
+                                </h3>
+                                
+                                <div className="space-y-1">
+                                    <label className="text-sm font-bold text-soosi-dark ml-1">有對什麼過敏嗎 (例如:雞肉或牛肉)</label>
+                                    <input type="text" name="allergies" value={formData.allergies || ''} onChange={handleInputChange} placeholder="請填寫過敏源..." className="w-full bg-gray-50 border-0 rounded-xl p-3 focus:ring-2 focus:ring-soosi-green/30" />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-sm font-bold text-soosi-dark ml-1">個性如何呢? 有分離焦慮嗎? <span className="text-red-500">*</span></label>
+                                    <textarea name="personality" required value={formData.personality || ''} onChange={handleInputChange} rows="3" placeholder="請描述個性、是否親人親狗、分離焦慮狀況..." className="w-full bg-gray-50 border-0 rounded-xl p-3 focus:ring-2 focus:ring-soosi-green/30 resize-none"></textarea>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-sm font-bold text-soosi-dark ml-1">有需要特別注意的嗎? 任何事情都可以說越詳細越好</label>
+                                    <textarea name="specialNotes" value={formData.specialNotes || ''} onChange={handleInputChange} rows="3" placeholder="例如：害怕打雷、不喜歡被摸腳..." className="w-full bg-gray-50 border-0 rounded-xl p-3 focus:ring-2 focus:ring-soosi-green/30 resize-none"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                         {/* Legal & Signature */}
                         <section className="cute-card p-8 space-y-8">
                             <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
@@ -735,6 +1088,7 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                 <h4 className="font-bold border-b border-soosi-wood/10 pb-2 mb-2">乙方（店家）資訊</h4>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div><span className="opacity-60 block">店家名稱</span><span className="font-bold">宿洗 Soosi Pet</span></div>
+                                    <div><span className="opacity-60 block">負責人</span><span className="font-bold">待確認</span></div>
                                     <div><span className="opacity-60 block">特寵業字號</span><span className="font-bold">S1140030號</span></div>
                                     <div><span className="opacity-60 block">聯絡電話</span><span className="font-bold">待確認</span></div>
                                     <div><span className="opacity-60 block">營業時間</span><span className="font-bold">待確認</span></div>
@@ -749,7 +1103,7 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                     <div className="flex items-center gap-3 text-left">
                                         <div className={`p-2 rounded-lg ${termsRead.grooming ? 'bg-soosi-green text-white' : 'bg-[#E8F1EB] text-soosi-green'}`}><Icon name={termsRead.grooming ? "check" : "scissors"} size={20}/></div>
                                         <div>
-                                            <div className={`font-bold text-sm text-soosi-dark`}>請詳閱【犬、貓美容契約條款】</div>
+                                            <div className={`font-bold text-sm text-soosi-dark`}>【犬、貓美容契約條款】</div>
                                             {!termsRead.grooming && <div className="text-xs text-gray-400">點擊閱讀</div>}
                                         </div>
                                     </div>
@@ -763,7 +1117,7 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                         <div className="flex items-center gap-3 text-left">
                                             <div className={`p-2 rounded-lg ${termsRead.boarding ? 'bg-soosi-wood text-white' : 'bg-[#F5EFE9] text-soosi-wood'}`}><Icon name={termsRead.boarding ? "check" : "home"} size={20}/></div>
                                             <div>
-                                                <div className={`font-bold text-sm text-soosi-dark`}>請詳閱【寵物住宿安親契約】</div>
+                                                <div className={`font-bold text-sm text-soosi-dark`}>【犬、貓住宿契約條款】</div>
                                                 {!termsRead.boarding && <div className="text-xs text-gray-400">點擊閱讀</div>}
                                             </div>
                                         </div>
@@ -778,7 +1132,7 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                         <div className="flex items-center gap-3 text-left">
                                             <div className={`p-2 rounded-lg ${termsRead.highRiskGrooming ? 'bg-soosi-green text-white' : 'bg-red-50 text-red-500'}`}><Icon name={termsRead.highRiskGrooming ? "check" : "alert-triangle"} size={20}/></div>
                                             <div>
-                                                <div className={`font-bold text-sm ${termsRead.highRiskGrooming ? 'text-soosi-green' : 'text-red-600'}`}>高風險【美容】服務風險告知</div>
+                                                <div className={`font-bold text-sm ${termsRead.highRiskGrooming ? 'text-soosi-green' : 'text-red-600'}`}>【高風險】美容服務風險告知</div>
                                                 <div className="text-xs text-gray-400 font-bold">
                                                     {riskType === 'senior' ? '檢測到毛孩已滿 8 歲' : riskType === 'puppy' ? '檢測到毛孩未滿 5 個月' : '檢測到毛孩有過往病史'}，請務必詳閱
                                                 </div>
@@ -795,7 +1149,7 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                         <div className="flex items-center gap-3 text-left">
                                             <div className={`p-2 rounded-lg ${termsRead.highRiskBoarding ? 'bg-soosi-wood text-white' : 'bg-red-50 text-red-500'}`}><Icon name={termsRead.highRiskBoarding ? "check" : "alert-triangle"} size={20}/></div>
                                             <div>
-                                                <div className={`font-bold text-sm ${termsRead.highRiskBoarding ? 'text-soosi-wood' : 'text-red-600'}`}>高風險【住宿】服務風險告知</div>
+                                                <div className={`font-bold text-sm ${termsRead.highRiskBoarding ? 'text-soosi-wood' : 'text-red-600'}`}>【高風險】住宿服務風險告知</div>
                                                 <div className="text-xs text-gray-400 font-bold">
                                                     針對高齡、幼齡或病史寵物之住宿特別約定
                                                 </div>
@@ -878,38 +1232,243 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                     )}
 
                     {/* Terms Modals */}
-                    <TermsModal isOpen={activeModal === 'grooming'} onClose={()=>setActiveModal(null)} title="美容服務契約條款" onAgree={()=>setTermsRead(p=>({...p, grooming:true}))}>
-                         <div className="space-y-4">
-                             <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-xs text-yellow-800 font-bold mb-2">
-                                 💡 本條款適用於所有美容服務項目。
-                             </div>
-                             <div className="space-y-2">
-                                <h5 className="font-black text-base text-soosi-wood">一、健康與安全告知</h5>
-                                <p>1. 飼主應誠實告知寵物身體狀況（如心臟病、癲癇、攻擊性等）。若隱瞞導致意外，飼主須自行負責。</p>
-                                <p>2. 若發現寄生蟲（跳蚤壁蝨），將強制執行除蟲與環境清潔費。</p>
-                             </div>
-                             <div className="space-y-2">
-                                <h5 className="font-black text-base text-soosi-wood">二、緊急醫療</h5>
-                                <p>若發生緊急狀況，店家將優先送往特約醫院，相關醫療費用由飼主負擔。</p>
-                             </div>
-                         </div>
+<TermsModal isOpen={activeModal === 'grooming'} onClose={()=>setActiveModal(null)} title="美容服務契約條款" onAgree={()=>setTermsRead(p=>({...p, grooming:true}))}>
+                        <div className="space-y-6 text-sm text-soosi-dark leading-relaxed">
+                            {/* Intro */}
+                            <div className="bg-soosi-green/10 p-4 rounded-xl border border-soosi-green/20">
+                                <h4 className="font-black text-soosi-green mb-2 text-base">美容服務同意書</h4>
+                                <p className="text-xs font-bold text-soosi-dark/80">為保障寵物安全及服務品質，預約前請詳閱。當您預約，即視為已充分了解並同意遵守以下所有規定。</p>
+                            </div>
+
+                            {/* 一、共通條款 */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">一、共通條款</h5>
+                                <ul className="list-decimal pl-5 space-y-2 marker:text-soosi-wood marker:font-bold">
+                                    <li><span className="font-bold">服務公約與付款：</span>飼主同意遵守本工作室之公約、計費方式及相關規則，並如實付款。</li>
+                                    <li><span className="font-bold">聯絡資料正確性：</span>確保服務期間（10:00-20:00）聯繫暢通。因資訊錯誤造成之損失由飼主負責。</li>
+                                    <li><span className="font-bold text-soosi-red">健康狀況誠實申報：</span>務必告知特殊病史、過敏、近期手術或攻擊性。因隱瞞造成之損害，飼主須負全責。</li>
+                                    <li><span className="font-bold">潛在風險認知：</span>服務期間或返家七日內發生之疾病，本工作室不負相關責任。</li>
+                                    <li><span className="font-bold">就診醫院資訊：</span>請提供寵物固定就診醫院以利必要時查詢病歷。</li>
+                                    <li><span className="font-bold">服務拒絕權利：</span>若患有傳染病、嚴重攻擊性或需特殊照護未告知，保有拒絕服務權利。</li>
+                                    <li><span className="font-bold">資料變更通知：</span>資料變更後三日內需主動以LINE通知。</li>
+                                </ul>
+                            </div>
+
+                            {/* 二、服務項目與收費 */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">二、服務項目與收費</h5>
+                                <div className="space-y-3">
+                                    <p>1. 收費依體型毛量現場報價。若發現跳蚤壁蝨，將收取環境清潔費 <span className="text-soosi-red font-black">$1,000</span>。打結與廢毛處理費另計（拆結 <span className="font-bold">$200起</span>、廢毛 <span className="font-bold">$100起</span>）。</p>
+                                    <p>2. 美容服務完成後恕不接受異議、退款，費用須於當日支付完成。</p>
+                                    <p>3. 若過程情緒過於緊張或有攻擊行為，將立即終止服務且不予收費。</p>
+                                    <p>4. 若需額外協助安撫，將酌收情緒管理費 <span className="font-bold">$300-$500</span>。</p>
+                                    
+                                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                        <p className="font-bold text-soosi-wood mb-1">5. 逾時安親費 (通知後2小時未接回)：</p>
+                                        <ul className="list-disc pl-4 text-xs space-y-1 text-gray-600">
+                                            <li>小型犬：$90/時</li>
+                                            <li>中型犬：$100/時</li>
+                                            <li>大型犬：$120/時</li>
+                                            <li>貓咪：$90/時</li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="bg-soosi-accent/10 border border-soosi-accent/30 p-4 rounded-xl space-y-2 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 bg-soosi-accent text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">優惠方案</div>
+                                        <p className="font-black text-soosi-wood">★ 五次美容連續回訪優惠方案</p>
+                                        <ul className="list-disc pl-4 text-xs space-y-1 text-soosi-dark/90">
+                                            <li><span className="font-bold">條件：</span>首次起 35日內 完成第1至4次美容。</li>
+                                            <li><span className="font-bold">折扣：</span>第4次後 15日內 回訪第5次，享 <span className="font-bold text-soosi-red">$200 折抵</span>。</li>
+                                            <li>僅限同一毛孩，不得轉讓、拆分或兌現。逾期視同放棄。</li>
+                                            <li>若毛孩健康狀況不適合繼續美容，雙方得另行協議。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 三、健康與接待規定 */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">三、健康與接待規定</h5>
+                                <div className="space-y-3">
+                                    <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-soosi-red text-xs font-bold space-y-2">
+                                        <div className="flex items-center gap-2 text-sm"><Icon name="x-circle" size={16}/> <span>我們無法接待：</span></div>
+                                        <ul className="list-disc pl-5 space-y-1 text-soosi-dark">
+                                            <li>未滿3個月、未打完三劑疫苗、接種疫苗一周內之幼犬貓。</li>
+                                            <li>身上有活體寄生蟲。</li>
+                                            <li>患有心臟病、癲癇、傳染病（貓瘟/FIV/FeLV/黴菌等）、嚴重呼吸道或腎臟疾病。</li>
+                                        </ul>
+                                    </div>
+                                    <p className="text-xs">2. 若現場發現上述狀況（如寄生蟲、打噴嚏、黴菌），將退回並收取環境清潔費 <span className="text-soosi-red font-bold">$1,000</span>。</p>
+                                    <p className="text-xs">3. 若故意隱瞞攻擊行為導致人員受傷，飼主須負責相關醫療費用。</p>
+                                </div>
+                            </div>
+
+                            {/* 四、其他條款 (原三) */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">四、其他條款</h5>
+                                <ul className="list-decimal pl-5 space-y-2">
+                                    <li><span className="font-bold">輕微受傷處置：</span>因不可抗力導致小於1公分之淺表傷口，工作室將消毒清潔。飼主回後24小時內無異議視同接受。</li>
+                                    <li className="bg-gray-50 p-3 rounded-lg -ml-2">
+                                        <span className="font-bold block mb-1">意外事故與賠償標準：</span>
+                                        <span className="text-xs text-gray-600 block mb-2">若因工作室重大疏失導致受傷或往生，經保險審核未理賠時，依以下標準補償：</span>
+                                        <div className="flex gap-2">
+                                            <span className="bg-white border px-2 py-1 rounded text-xs font-bold text-soosi-dark">受傷醫療上限 $2,000</span>
+                                            <span className="bg-white border px-2 py-1 rounded text-xs font-bold text-soosi-dark">意外往生慰撫金上限 $5,000</span>
+                                        </div>
+                                        <span className="text-[10px] text-gray-400 mt-1 block">超過上述金額部分，不另負擔賠償責任。</span>
+                                    </li>
+                                    <li><span className="font-bold">緊急就醫：</span>突發狀況無法即時聯絡時，授權店家送醫處置，費用由飼主負擔。若非店家疏失（如隱瞞病情），不負賠償責任。</li>
+                                    <li>本工作室非動物醫院，不提供醫療行為。逾三日未接回依動保法通報。</li>
+                                </ul>
+                            </div>
+
+                            {/* 五~八、法律與個資 (合併顯示以節省空間，但保留完整意義) */}
+                            <div className="bg-[#F9F7F2] p-4 rounded-xl border border-soosi-wood/10 space-y-4 text-xs text-gray-600">
+                                <div>
+                                    <h6 className="font-bold text-soosi-wood text-sm mb-1">五、個人資料與影像授權</h6>
+                                    <p>同意個資用於服務聯繫與行銷。同意無償授權寵物影像用於官方宣傳，若不同意請提前告知，將不會上傳。</p>
+                                </div>
+                                <div>
+                                    <h6 className="font-bold text-soosi-wood text-sm mb-1">六、爭議處理與管轄</h6>
+                                    <p>服務爭議須於7日內申訴，以獸醫診斷為準。雙方同意以臺灣沙鹿地方法院為第一審管轄法院。</p>
+                                </div>
+                                <div>
+                                    <h6 className="font-bold text-soosi-wood text-sm mb-1">七、監視器調閱</h6>
+                                    <p>事故發生後3日內可申請調閱相關片段。首次免費，再次申請酌收行政費 $200/次。</p>
+                                </div>
+                                <div>
+                                    <h6 className="font-bold text-soosi-wood text-sm mb-1">八、條款效力與修改</h6>
+                                    <p>本同意書簽署即具永久效力。工作室保有修訂權利，公告於官方LINE即生效。</p>
+                                </div>
+                            </div>
+                            
+                            <div className="text-center text-xs text-soosi-wood/40 mt-6 font-bold tracking-widest">
+                                --- 閱讀完畢請向下滑動以解鎖同意按鈕 ---
+                            </div>
+                        </div>
                     </TermsModal>
 
-                    <TermsModal isOpen={activeModal === 'boarding'} onClose={()=>setActiveModal(null)} title="住宿安親契約條款" onAgree={()=>setTermsRead(p=>({...p, boarding:true}))}>
-                         <div className="space-y-4">
-                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-xs text-blue-800 font-bold mb-2">
-                                 💡 住宿期間包含基本美容服務，故需同時同意美容條款。
-                             </div>
-                             <div className="space-y-2">
-                                <h5 className="font-black text-base text-soosi-wood">一、住宿規範</h5>
-                                <p>1. 入住前需確認已施打核心疫苗（狂犬病、多合一）。</p>
-                                <p>2. 住宿以 24 小時制計算，超時將加收安親費用。</p>
-                             </div>
-                             <div className="space-y-2">
-                                <h5 className="font-black text-base text-soosi-wood">二、飲食與作息</h5>
-                                <p>建議自備飼料以避免腸胃不適，若需店家提供將另收費用。</p>
-                             </div>
-                         </div>
+                    {/* 2. 住宿條款 Modal */}
+
+<TermsModal isOpen={activeModal === 'boarding'} onClose={()=>setActiveModal(null)} title="住宿安親契約條款" onAgree={()=>setTermsRead(p=>({...p, boarding:true}))}>
+                        <div className="space-y-6 text-sm text-soosi-dark leading-relaxed">
+                            {/* Intro */}
+                            <div className="bg-soosi-wood/10 p-4 rounded-xl border border-soosi-wood/20">
+                                <h4 className="font-black text-soosi-wood mb-2 text-base">住宿服務同意書</h4>
+                                <p className="text-xs font-bold text-soosi-dark/80">為保障寵物安全，請詳閱。預約即視為同意遵守以下規定。住宿期間包含基本美容服務，故需同時同意美容條款。</p>
+                            </div>
+
+                            {/* 一、基本條款 */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">一、基本條款</h5>
+                                <ul className="list-decimal pl-5 space-y-2 marker:text-soosi-wood marker:font-bold">
+                                    <li><span className="font-bold">服務承諾：</span>飼主同意遵守公約、計費方式並如實付款。</li>
+                                    <li><span className="font-bold">聯絡暢通：</span>服務期間（10:00-20:00）請保持聯繫。若資訊錯誤導致損失由飼主負責。</li>
+                                    <li><span className="font-bold text-soosi-red">誠實申報：</span>須告知特殊病史、過敏、近期手術或攻擊性。隱瞞造成之損害須負全責。</li>
+                                    <li><span className="font-bold">風險認知：</span>服務期間或返家七日內發生之疾病，本公司不負相關責任。</li>
+                                    <li><span className="font-bold">拒絕權利：</span>若患有傳染病、嚴重攻擊性或未告知之特殊照護需求，保有拒絕服務權。</li>
+                                </ul>
+                            </div>
+
+                            {/* 二、入住須知與健康規範 */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">二、入住須知與健康規範</h5>
+                                <div className="space-y-3">
+                                    <p>1. <span className="font-bold">時間：</span>以「晚」計價，入退房時間 <span className="font-bold">10:00-20:00</span>。逾時需隔日接回並支付過夜費。</p>
+                                    <p>2. <span className="font-bold">建檔：</span>需提供身分證正反面建檔以防棄養。</p>
+                                    <div className="bg-red-50 p-3 rounded-lg border border-red-100 space-y-2">
+                                        <p className="font-bold text-soosi-red text-xs">⚠️ 疫苗與驅蟲要求</p>
+                                        <ul className="list-disc pl-5 text-xs text-soosi-dark space-y-1">
+                                            <li>未接種/過期疫苗者，飼主須承擔傳染風險。</li>
+                                            <li>須完成體內外驅蟲。若發現寄生蟲且無法提供證明，將代為送醫並收取費用 <span className="font-bold text-soosi-red">$500起</span>。</li>
+                                        </ul>
+                                    </div>
+                                    <p>4. 狗狗入住三天內需於本館洗澡；貓咪不強迫。</p>
+                                    <p>5. 狗狗須完成2小時安親測試（不可與住宿同日）；貓咪免安親，但具強烈攻擊/焦慮者不接待。</p>
+                                </div>
+                            </div>
+
+                            {/* 三、住宿與照護安排 (修正編號) */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">三、住宿與照護安排</h5>
+                                <ul className="list-decimal pl-5 space-y-2">
+                                    <li><span className="font-bold">放風：</span>每日2次。若不希望參與、或寵物有健康疑慮，請主動告知。（未施打疫苗、高齡、未結紮者不安排共同放風）。</li>
+                                    <li><span className="font-bold">飲食：</span>特殊飲食照護每日加收 <span className="font-bold">$100-$500</span>。若自備食物不足，代購費用另計。</li>
+                                    <li><span className="font-bold">物品：</span>請自備熟悉物品。抬腳尿尿狗狗將穿戴禮貌帶。</li>
+                                    <li><span className="font-bold">損壞賠償：</span>若寵物破壞設施，飼主須照價賠償。</li>
+                                </ul>
+                            </div>
+
+                            {/* 四、緊急狀況與送醫 (修正編號) */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">四、緊急狀況與送醫</h5>
+                                <div className="space-y-2">
+                                    <p>若身體不適將立即通知並送醫。合作醫院為 <span className="font-bold">泰爾動物醫院</span>。</p>
+                                    <p>若需代辦送醫，每次酌收 <span className="font-bold">$500</span> 車馬費（不含診療費）。</p>
+                                    <p className="text-xs text-gray-500">※ 若因隱瞞病況導致意外，經判定無疏失，店家不負賠償責任。</p>
+                                </div>
+                            </div>
+
+                            {/* 五、預約與取消 (修正編號) */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">五、預約與取消條款</h5>
+                                <p>訂房須付50%定金，入住繳清。提前退宿不退費。</p>
+                                <div className="overflow-hidden rounded-xl border border-gray-200">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-gray-100 text-gray-600 font-bold">
+                                            <tr><th className="p-2">取消時間</th><th className="p-2">退費比例</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="p-2">15天前</td><td className="p-2 text-soosi-green font-bold">全額退費</td></tr>
+                                            <tr><td className="p-2">10-14天前</td><td className="p-2">退 70%</td></tr>
+                                            <tr><td className="p-2">7-9天前</td><td className="p-2">退 50%</td></tr>
+                                            <tr><td className="p-2">少於7天</td><td className="p-2 text-soosi-red font-bold">不退定金</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p className="text-[10px] text-gray-400">※ 春節規定另訂。非指定銀行退款扣手續費。</p>
+                            </div>
+
+                            {/* 六、其他與責任 (修正編號) */}
+                            <div className="space-y-3">
+                                <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">六、其他與責任歸屬</h5>
+                                
+                                <div className="bg-soosi-red/10 border border-soosi-red/20 p-3 rounded-xl">
+                                    <p className="font-black text-soosi-red mb-1 text-xs">⛔ 棄養處置</p>
+                                    <p className="text-xs text-soosi-dark">逾期三日未領回且失聯者，視為惡意棄養。將交由動保機構處理並追償法律責任。</p>
+                                </div>
+
+                                <ul className="list-decimal pl-5 space-y-2">
+                                    <li><span className="font-bold">代領規定：</span>需事先LINE告知代領人資訊，取回時查核證件。</li>
+                                    <li className="bg-gray-50 p-3 rounded-lg -ml-2">
+                                        <span className="font-bold block mb-1">意外事故與賠償標準：</span>
+                                        <span className="text-xs text-gray-600 block mb-2">若因工作室重大疏失導致受傷或往生，經保險審核未理賠時，依以下標準補償：</span>
+                                        <div className="flex gap-2">
+                                            <span className="bg-white border px-2 py-1 rounded text-xs font-bold text-soosi-dark">受傷醫療上限 $2,000</span>
+                                            <span className="bg-white border px-2 py-1 rounded text-xs font-bold text-soosi-dark">意外往生慰撫金上限 $5,000</span>
+                                        </div>
+                                        <span className="text-[10px] text-gray-400 mt-1 block">本工作室非醫療機構。超過上述金額部分，不另負擔賠償責任。</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            {/* 七~十、法律與個資 (合併顯示) */}
+                            <div className="bg-[#F9F7F2] p-4 rounded-xl border border-soosi-wood/10 space-y-4 text-xs text-gray-600">
+                                <div>
+                                    <h6 className="font-bold text-soosi-wood text-sm mb-1">七、法律與個資聲明</h6>
+                                    <ul className="list-disc pl-4 space-y-1">
+                                        <li>同意個資用於服務聯繫與行銷；同意無償授權影像用於官方宣傳。</li>
+                                        <li>服務爭議須於7日內申訴。雙方同意以臺灣沙鹿地方法院為第一審管轄法院。</li>
+                                        <li>事故發生後3日內可申請調閱監視器。首次免費，再次申請酌收行政費 $200/次。</li>
+                                        <li>本同意書簽署即具永久效力。條款修訂公告於官方LINE即生效。</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <div className="text-center text-xs text-soosi-wood/40 mt-6 font-bold tracking-widest">
+                                --- 閱讀完畢請向下滑動以解鎖同意按鈕 ---
+                            </div>
+                        </div>
                     </TermsModal>
 
                     <TermsModal isOpen={activeModal === 'senior'} onClose={()=>setActiveModal(null)} title="高風險寵物服務風險告知" onAgree={()=>setTermsRead(p=>({...p, senior:true}))}>
@@ -925,41 +1484,129 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                          </div>
                     </TermsModal>
 {/* 3. 高風險美容 Modal */}
-                    <TermsModal isOpen={activeModal === 'highRiskGrooming'} onClose={()=>setActiveModal(null)} title="高風險美容服務風險告知" onAgree={()=>setTermsRead(p=>({...p, highRiskGrooming:true}))}>
-                         <div className="space-y-4 border-2 border-red-100 rounded-xl p-4 bg-red-50">
-                             <h4 className="font-bold text-center text-lg text-soosi-red border-b border-red-200 pb-2 mb-2">【高風險美容同意書】</h4>
-                             <p className="font-bold text-soosi-dark text-sm">
-                                 針對 {riskType === 'senior' ? '高齡犬 (8歲以上)' : riskType === 'puppy' ? '幼犬 (5個月以下)' : '患有過往病史之寵物'} 之美容特別約定：
-                             </p>
-                             <ul className="list-disc pl-5 space-y-2 mt-2 text-sm text-soosi-dark">
-                                <li>本人知悉高齡/幼齡/生病寵物在洗澡、吹整過程中，因緊迫可能導致潛在疾病發作（如休克、癲癇）。</li>
-                                <li>美容師將盡力採取溫和手段，若寵物無法負荷將隨時中止服務。</li>
-                                <li>若發生不可抗力之意外（非人為蓄意傷害），同意不追究店家責任。</li>
-                             </ul>
-                             <p className="text-xs text-gray-500 mt-2 text-center">-- 完整條款待補 --</p>
-                         </div>
+<TermsModal isOpen={activeModal === 'highRiskGrooming'} onClose={()=>setActiveModal(null)} title="高風險美容服務風險告知" onAgree={()=>setTermsRead(p=>({...p, highRiskGrooming:true}))}>
+                        <div className="space-y-5 text-sm text-soosi-dark leading-relaxed">
+                            {/* Header Alert */}
+                            <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-center shadow-sm">
+                                <h4 className="font-black text-soosi-red text-base border-b border-red-200 pb-2 mb-2">【高風險寵物美容同意聲明】</h4>
+                                <p className="text-xs font-bold text-red-700">針對高齡、幼齡、過往病史或行為敏感寵物之特別約定。</p>
+                            </div>
+
+                            {/* 一、誠實告知 */}
+                            <div className="space-y-2">
+                                <h5 className="font-black text-soosi-wood border-l-4 border-soosi-wood pl-2">一、飼主誠實告知義務</h5>
+                                <p className="text-xs">飼主確認已如實告知寵物狀況（年齡、心臟病/癲癇等病史、懷孕、過敏、攻擊紀錄等）。</p>
+                                <p className="text-xs font-bold text-soosi-red">※ 若因未告知或提供不實資訊，導致店家無法預見之風險發生，責任由飼主自負。</p>
+                            </div>
+
+                            {/* 二、高風險告知 (重點) */}
+                            <div className="bg-red-50/50 p-3 rounded-lg border border-red-100 space-y-2">
+                                <h5 className="font-black text-soosi-red border-l-4 border-soosi-red pl-2">二、高齡與特殊健康狀況風險</h5>
+                                <ul className="list-disc pl-5 space-y-1 text-xs text-soosi-dark">
+                                    <li><span className="font-bold">風險認知：</span>高齡、幼齡或慢性病寵物，對壓力耐受度較低。</li>
+                                    <li><span className="font-bold">突發狀況：</span>美容過程可能因緊張誘發休克、舊疾復發或不可預期之風險。</li>
+                                    <li><span className="font-bold text-red-700">免責聲明：</span>若非因店家故意或重大過失，而是源於寵物自身健康導致之不利結果，本工作室不負損害賠償責任。</li>
+                                </ul>
+                            </div>
+
+                            {/* 三、攻擊性防護 */}
+                            <div className="space-y-2">
+                                <h5 className="font-black text-soosi-wood border-l-4 border-soosi-wood pl-2">三、攻擊性與行為安全防護</h5>
+                                <p className="text-xs">若寵物出現攻擊或過度躁動，授權店家採取必要防護（如戴嘴套、保定）。若經判斷危及安全，得隨時中止服務，費用依進度收取。</p>
+                            </div>
+
+                            {/* 四、緊急醫療 */}
+                            <div className="space-y-2">
+                                <h5 className="font-black text-soosi-wood border-l-4 border-soosi-wood pl-2">四、緊急醫療處置</h5>
+                                <p className="text-xs">發生緊急狀況時，同意店家優先送往指定或就近動物醫院，相關費用由飼主負擔。</p>
+                            </div>
+
+                            <div className="text-center text-xs text-gray-400 mt-4 font-bold border-t border-dashed pt-4">
+                                我已詳閱並充分理解上述內容，同意將寵物交付服務。
+                            </div>
+                        </div>
                     </TermsModal>
 
                     {/* 4. 高風險住宿 Modal */}
-                    <TermsModal isOpen={activeModal === 'highRiskBoarding'} onClose={()=>setActiveModal(null)} title="高風險住宿服務風險告知" onAgree={()=>setTermsRead(p=>({...p, highRiskBoarding:true}))}>
-                         <div className="space-y-4 border-2 border-red-100 rounded-xl p-4 bg-red-50">
-                             <h4 className="font-bold text-center text-lg text-soosi-red border-b border-red-200 pb-2 mb-2">【高風險住宿同意書】</h4>
-                             <p className="font-bold text-soosi-dark text-sm">
-                                 針對 {riskType === 'senior' ? '高齡犬 (8歲以上)' : riskType === 'puppy' ? '幼犬 (5個月以下)' : '患有過往病史之寵物'} 之住宿特別約定：
-                             </p>
-                             <ul className="list-disc pl-5 space-y-2 mt-2 text-sm text-soosi-dark">
-                                <li>本人知悉夜間無人照護時段，若寵物因自身疾病發作（如心臟病、嘔吐窒息）導致意外，店家無法即時處置。</li>
-                                <li>同意授權店家於緊急時刻進行醫療處置，費用由飼主負擔。</li>
-                                <li>已確認寵物身體狀況適合住宿，無隱瞞重大病情。</li>
-                             </ul>
-                             <p className="text-xs text-gray-500 mt-2 text-center">-- 完整條款待補 --</p>
-                         </div>
+<TermsModal isOpen={activeModal === 'highRiskBoarding'} onClose={()=>setActiveModal(null)} title="高風險住宿服務風險告知" onAgree={()=>setTermsRead(p=>({...p, highRiskBoarding:true}))}>
+                        <div className="space-y-5 text-sm text-soosi-dark leading-relaxed">
+                            {/* Warning Box - 最重要的無24H */}
+                            <div className="bg-soosi-red text-white p-4 rounded-xl shadow-md text-center">
+                                <h4 className="font-black text-lg mb-1">⚠️ 重要告知：無 24 小時照護</h4>
+                                <p className="text-xs font-bold opacity-90">住宿期間晚上無人駐店，若發生突發狀況店家無法即時處置。</p>
+                            </div>
+
+                            {/* 一、健康風險免責 */}
+                            <div className="space-y-2">
+                                <h5 className="font-black text-soosi-wood border-l-4 border-soosi-wood pl-2">一、健康與遺傳風險免責</h5>
+                                <div className="text-xs space-y-2">
+                                    <p>若因以下因素導致寵物疾病發作、意外休克或死亡，<span className="font-bold text-soosi-red">概與本工作室無關</span>：</p>
+                                    <ul className="list-disc pl-5 text-gray-600">
+                                        <li>基因或遺傳問題。</li>
+                                        <li>天生病史、高齡犬貓或幼犬貓。</li>
+                                        <li>飼主隱瞞病情或已知風險仍堅持住宿。</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            {/* 二、緊急送醫與費用 */}
+                            <div className="space-y-2">
+                                <h5 className="font-black text-soosi-wood border-l-4 border-soosi-wood pl-2">二、緊急送醫與費用</h5>
+                                <p className="text-xs">若發生上述意外，工作室將立即送往附近動物醫院救治。送醫途中或治療所產生之所有費用，皆由飼主全額負擔。</p>
+                            </div>
+
+                            {/* 三、夜間無人與情緒風險 (再次強調) */}
+                            <div className="bg-red-50 p-3 rounded-lg border border-red-100 space-y-2">
+                                <h5 className="font-black text-soosi-red text-xs">⛔ 夜間與情緒風險特別聲明</h5>
+                                <ul className="list-disc pl-5 text-xs text-soosi-dark">
+                                    <li>飼主已知本工作室<span className="font-bold">無 24 小時服務</span>。</li>
+                                    <li>夜間無人照護時，若因寵物本身焦慮、情緒不穩導致自殘或受傷，或因急病無法即時救治，<span className="font-bold">與本工作室無關</span>。</li>
+                                </ul>
+                            </div>
+
+                            {/* 四、法律效力 */}
+                            <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
+                                <span className="font-bold">法律效力確認：</span>
+                                倘若發生法律糾紛或訴訟，本切結書將作為雙方權利義務之重要依據，並呈交相關法律部門佐證。
+                            </div>
+                        </div>
                     </TermsModal>
+                    {/* 5. 美容價目表 Modal */}
+                    <PriceListModal isOpen={activeModal === 'priceList'} onClose={()=>setActiveModal(null)} />
+                    {/* 6. 住宿價目表 Modal (圖片版) */}
+                    <BoardingPriceModal isOpen={activeModal === 'boardingPrice'} onClose={()=>setActiveModal(null)} />
                 </div>
             );
         };
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+    <script>
+        // Service Worker 自動更新腳本
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    // 1. 註冊 Service Worker (請確認你的檔案名稱是 sw.js)
+                    const registration = await navigator.serviceWorker.register('./sw.js');
+                    console.log('Service Worker 註冊成功');
+
+                    // 2. 監聽更新：當偵測到 sw.js 內容有變動時
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            // 當新的 Service Worker 安裝完成且準備好接管時
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('偵測到新版本，正在自動更新頁面...');
+                                // 強制重整頁面，確保使用者看到的是最新版
+                                window.location.reload();
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.error('Service Worker 註冊失敗:', error);
+                }
+            });
+        }
     </script>
 </body>
 </html>

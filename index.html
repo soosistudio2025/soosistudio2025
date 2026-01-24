@@ -311,13 +311,14 @@ return (
                     small: '2000~2400', full: '4000~6500' 
                 },
             ],
-            cats: [
-                // 這裡補上了您要求的完整備註
-                { type: '幼貓', sub: '2-6個月', small: '600', full: '-', note: '*視親人程度' },
-                { type: '短毛貓', sub: '2-6kg / >6kg', small: '800 / 1000', full: '1600 / 2000', note: '*6kg以上 +$100/kg' },
-                { type: '中長毛', sub: '2-6kg / >6kg', small: '1000 / 1200', full: '2000 / 2400', note: '*6kg以上 +$100/kg' },
-                { type: '長毛貓', sub: '2-6kg / >6kg', small: '1200 / 1400', full: '2400 / 2800', note: '*6kg以上 +$100/kg' },
-            ],
+cats: [
+    { type: '幼貓', sub: '2-6個月', small: '600', full: '-', note: '*視親人程度' },
+    { type: '短毛貓', sub: '2-6kg / >6kg', small: '800 / 1000', full: '1600 / 2000', note: '*6kg以上 +$100/kg' },
+    { type: '中長毛', sub: '2-6kg / >6kg', small: '1000 / 1200', full: '2000 / 2400', note: '*6kg以上 +$100/kg' },
+    { type: '長毛貓', sub: '2-6kg / >6kg', small: '1200 / 1400', full: '2400 / 2800', note: '*6kg以上 +$100/kg' },
+    // 貓咪升級項目
+    { type: '升級項目', sub: '去油選項', small: '局部 200', full: '全身 800~1000', note: '*視毛量與狀況而定' },
+],
             extras: [
                 { id: 'local', name: '局部修飾', desc: '貴賓臉/腳', price: '$150 / $300', forDogOnly: true },
                 { id: 'style', name: '特殊造型', desc: '腳球 / 腳柱', price: '$400起 / $600起', forDogOnly: true },
@@ -371,12 +372,12 @@ const PriceListPage = ({ onBack }) => {
                     <div className="grid grid-cols-2 gap-4 pt-3 border-t border-dashed">
                         {/* 小美容區塊 */}
                         <div className="text-center">
-                            <div className="text-[11px] text-black font-bold mb-1">小美容(洗澡+修剪)</div>
+                            <div className="text-[11px] text-black font-bold mb-1">小美容</div>
                             <div className="font-mono font-black text-soosi-wood text-lg">${item.small}</div>
                         </div>
                         {/* 大美容區塊 */}
                         <div className="text-center border-l border-gray-100">
-                            <div className="text-[11px] text-black font-bold mb-1">大美容(全身造型)</div>
+                            <div className="text-[11px] text-black font-bold mb-1">大美容</div>
                             <div className="font-mono font-black text-soosi-green text-lg">${item.full}</div>
                         </div>
                     </div>
@@ -409,50 +410,66 @@ const PriceListPage = ({ onBack }) => {
                             </div>
                         )}
 
-                        {searchQuery ? (
-                            <div className="space-y-4">
-                                <div className="text-xs font-bold text-gray-400 px-1">搜尋結果：</div>
-                                {filteredDogs?.length > 0 ? filteredDogs.map((item, i) => <PriceCard key={i} item={item} />) : <div className="text-center py-10 text-gray-300 font-bold">找不到相關犬種，請嘗試其他關鍵字</div>}
-                            </div>
-                        ) : activeTab === 'cat' ? (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div className="bg-white rounded-2xl p-6 shadow-sm border border-soosi-wood/5 relative overflow-hidden">
-                                    <Icon name="cat" className="absolute -right-6 -bottom-6 text-soosi-wood/5 w-32 h-32" />
-                                    <h4 className="font-black text-soosi-wood mb-5 text-lg">🐱 貓咪美容價格</h4>
-                                    <div className="space-y-6">
-                                        {PRICE_DATA.cats.map((cat, i) => (
-                                            <div key={i} className="relative z-10 border-b border-gray-50 pb-4 last:border-0 last:pb-0">
-                                                <div className="flex justify-between items-baseline mb-3">
-                                                    <span className="font-bold text-soosi-dark">{cat.type}</span>
-                                                    <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{cat.sub}</span>
-                                                </div>
-                                                
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="text-center">
-                                                        <div className="text-[10px] font-bold text-black mb-1">小美容(洗澡)</div>
-                                                        <div className="font-mono font-black text-soosi-wood text-lg">${cat.small}</div>
-                                                    </div>
-                                                    <div className="text-center border-l border-gray-100">
-                                                        <div className="text-[10px] font-bold text-black mb-1">大美容(剃毛)</div>
-                                                        <div className="font-mono font-black text-soosi-green text-lg">${cat.full}</div>
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* 這裡加入您要求的備註顯示 */}
-                                                {cat.note && <div className="mt-2 text-[10px] text-red-400 font-bold text-right">{cat.note}</div>}
-                                            </div>
-                                        ))}
-                                    </div>
+{searchQuery ? (
+    <div className="space-y-4">
+        <div className="text-xs font-bold text-gray-400 px-1">搜尋結果：</div>
+        {filteredDogs?.length > 0 ? filteredDogs.map((item, i) => <PriceCard key={i} item={item} />) : <div className="text-center py-10 text-gray-300 font-bold">找不到相關犬種，請嘗試其他關鍵字</div>}
+    </div>
+) : activeTab === 'cat' ? (
+
+    <div className="space-y-4 animate-in fade-in">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-soosi-wood/5 relative overflow-hidden">
+            <Icon name="cat" className="absolute -right-6 -bottom-6 text-soosi-wood/5 w-32 h-32" />
+            <h4 className="font-black text-soosi-wood mb-5 text-lg">🐱 貓咪美容價格</h4>
+            <div className="space-y-6">
+                {PRICE_DATA.cats.map((cat, i) => (
+                    <div key={i} className="relative z-10 border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-baseline mb-3">
+                            <span className="font-bold text-soosi-dark">{cat.type}</span>
+                            <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{cat.sub}</span>
+                        </div>
+                        
+                        {/* 如果是升級項目，顯示不同的佈局 */}
+                        {cat.type === '升級項目' ? (
+                            <div className="grid grid-cols-2 gap-4 mt-3">
+                                <div className="text-center">
+                                    <div className="text-[10px] font-bold text-black mb-1">局部去油</div>
+                                    <div className="font-mono font-black text-soosi-wood text-lg">${cat.small}</div>
+                                </div>
+                                <div className="text-center border-l border-gray-100">
+                                    <div className="text-[10px] font-bold text-black mb-1">全身去油</div>
+                                    <div className="font-mono font-black text-soosi-green text-lg">${cat.full}</div>
                                 </div>
                             </div>
                         ) : (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="text-center">
+                                    <div className="text-[10px] font-bold text-black mb-1">小美容</div>
+                                    <div className="font-mono font-black text-soosi-wood text-lg">${cat.small}</div>
+                                </div>
+                                <div className="text-center border-l border-gray-100">
+                                    <div className="text-[10px] font-bold text-black mb-1">大美容</div>
+                                    <div className="font-mono font-black text-soosi-green text-lg">${cat.full}</div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* 這裡加入您要求的備註顯示 */}
+                        {cat.note && <div className="mt-2 text-[10px] text-red-400 font-bold text-right">{cat.note}</div>}
+                    </div>
+                ))}
+            </div>
+        </div>
+    </div>
+) : (
+
                             groupedDogs[activeTab].map((item, i) => <PriceCard key={i} item={item} />)
                         )}
 
                         {/* 其他費用區塊：自動過濾內容 */}
                         <div className="bg-white rounded-2xl p-6 shadow-sm border border-soosi-wood/5">
                             <h4 className="font-black text-soosi-wood mb-4 text-sm flex items-center gap-2">
-                                <Icon name="sparkles" size={14}/> ✨ 其他費用項目
+                             ✨ 其他費用項目
                             </h4>
                             {PRICE_DATA.extras
                                 .filter(ex => activeTab === 'cat' ? !ex.forDogOnly : true)
@@ -470,11 +487,13 @@ const PriceListPage = ({ onBack }) => {
                         <div className="bg-yellow-50 text-yellow-800 p-4 rounded-2xl text-[11px] leading-relaxed border border-yellow-100">
                             <span className="font-bold block mb-1 underline">計價說明：</span>
                             實際收費依現場測量「體重、毛量、廢毛狀況」為準。若有嚴重打結、跳蚤、攻擊行為，將現場另加收處理費。
+                            <br/><br/>
+                            <span className="font-bold text-red-600">⚠️ 注意：本店不接有寄生蟲、傳染疾病、黴菌之類的毛孩。若過程中發現，將額外收取環境清潔費 $1000。</span>
                         </div>
-                    </div>
-                </div>
-            );
-        };
+
+                    </div>  
+                  </div>
+            );        };
         // --- 住宿價目表 Modal (圖片版) ---
         const BoardingPriceModal = ({ isOpen, onClose }) => {
             if (!isOpen) return null;
@@ -548,18 +567,24 @@ const [activeModal, setActiveModal] = useState(null);
                 highRiskBoarding: false 
             });
 
-            const [formData, setFormData] = useState({
-                email: '', owner_name: '', phone: '', owner_id: '', address: '',
-                emergency_name: '', emergency_phone: '',
-                pet_name: '', breed: '', weight: '', 
-                age: '', age_months: '', is_under_one: false,
-                sex: '', fix: '', 
-                social_aggression: '', social_play: '', // 拆分社交欄位
-                grooming_temperament: '',
-                chip_status: '', chip_id: '', preferred_clinic: '',
-                medical_status: '', medical_history: [], medical_history_other: '',
-                service_type: '', service_type_other: '', legal_agree: false
-            });
+const [formData, setFormData] = useState({
+    email: '', owner_name: '', phone: '', owner_id: '', address: '',
+    emergency_name: '', emergency_phone: '',
+    pet_name: '', breed: '', weight: '', 
+    age: '', age_months: '', is_under_one: false,
+    sex: '', fix: '', 
+    social_aggression: '', social_play: '', 
+    grooming_temperament: '',
+    chip_status: '', chip_id: '', preferred_clinic: '',
+    medical_status: '', medical_history: [], medical_history_other: '',
+    service_type: '', service_type_other: '', legal_agree: false,
+    service_items: [], 
+    service_items_other: '', 
+    hasTrialStay: false,
+    pet_type: 'dog', 
+});
+
+
 
             // Routing
             useEffect(() => {
@@ -683,29 +708,40 @@ const riskType = useMemo(() => {
                 }
             }, [showFullSig]);
 
-            const handleSubmit = () => {
-                const newErrors = {};
-                const required = ['email', 'owner_name', 'phone', 'address', 'emergency_name', 'emergency_phone', 'pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'chip_status', 'medical_status', 'social_aggression', 'social_play'];
-                
-                required.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
-                if(formData.chip_status === '有晶片' && !formData.chip_id) newErrors.chip_status = '請輸入晶片號碼';
-                
-if(!lineConfirmed) newErrors.line = '請確認已加入 LINE';
-if(!allTermsRead) newErrors.signature = '請先完成上方所有契約條款閱讀';
-if(!realtimeSig) newErrors.signature = '請完成簽名';
-                
-                if (Object.keys(newErrors).length > 0) {
-                    setErrors(newErrors);
-                    const firstError = Object.keys(newErrors)[0];
-                    const el = document.getElementById(firstError);
-                    if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    else alert("請檢查必填欄位");
-                    return;
-                }
-                setIsSubmitting(true);
-                // 模擬送出
-                setTimeout(() => { alert("提交成功！"); setIsSubmitting(false); window.location.reload(); }, 1500);
-            };
+const handleSubmit = () => {
+    const newErrors = {};
+    const required = ['email', 'owner_name', 'phone', 'address', 'emergency_name', 'emergency_phone', 'pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'chip_status', 'medical_status', 'social_aggression', 'social_play'];
+    
+    required.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
+    if(formData.chip_status === '有晶片' && !formData.chip_id) newErrors.chip_status = '請輸入晶片號碼';
+    
+    // 新增：檢查是否選擇了至少一個服務項目（僅在非住宿模式下檢查）
+    if(!isBoarding && (!formData.service_items || formData.service_items.length === 0)) {
+        newErrors.service_items = '請選擇至少一項服務內容';
+    }
+    
+    // 新增：住宿模式檢查是否已試住
+    if(isBoarding && !formData.hasTrialStay) {
+        newErrors.hasTrialStay = '請先執行安親試住後再預約住宿';
+    }
+    
+    if(!lineConfirmed) newErrors.line = '請確認已加入 LINE';
+    if(!allTermsRead) newErrors.signature = '請先完成上方所有契約條款閱讀';
+    if(!realtimeSig) newErrors.signature = '請完成簽名';
+    
+    if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        const firstError = Object.keys(newErrors)[0];
+        const el = document.getElementById(firstError);
+        if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        else alert("請檢查必填欄位");
+        return;
+    }
+    setIsSubmitting(true);
+    // 模擬送出
+    setTimeout(() => { alert("提交成功！"); setIsSubmitting(false); window.location.reload(); }, 1500);
+};
+
 
             const PillBtn = ({ active, onClick, children, className = "" }) => (
                 <button type="button" onClick={onClick} 
@@ -919,60 +955,30 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
 </div>
                         </section>
 
-                        {/* 新增：預約時間區塊 (放在寵物資料上方) */}
+                        {/* 新增：寵物詳細資料 (移到預約時間上方) */}
                         <section className="cute-card p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-                            <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
-                                <span className="text-2xl">📅</span>
-                                <h3 className="text-lg font-black text-soosi-dark">
-                                    {isBoarding ? "住宿時間預約" : "美容預約資訊"}
-                                </h3>
-                            </div>
-
-                            {isBoarding ? (
-                                /* 住宿模式顯示 */
-                                <div className="space-y-4">
-                                    <div className="grid md:grid-cols-2 gap-5">
-                                        <InputGroup label="入住日期" required error={errors.checkInDate} id="checkInDate">
-                                            <input type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
-                                        </InputGroup>
-                                        <InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
-                                            <input type="date" name="checkOutDate" value={formData.checkOutDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} />
-                                        </InputGroup>
-                                    </div>
-                                    {/* 自動計算晚數 Badge */}
-                                    {stayDuration && (
-                                        <div className="flex justify-center pt-2 animate-in zoom-in duration-300">
-                                            <div className="bg-gradient-to-r from-soosi-wood to-[#7A5E47] text-white px-6 py-2.5 rounded-full font-bold shadow-lg flex items-center gap-2 transform hover:scale-105 transition-transform">
-                                                <Icon name="moon" size={18} className="text-soosi-accent" />
-                                                <span>共入住 <span className="text-soosi-accent text-lg">{stayDuration}</span> 晚</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                /* 美容模式顯示 */
-                                <div className="grid md:grid-cols-2 gap-5">
-                                    <InputGroup label="預約日期" required error={errors.bookingDate} id="bookingDate">
-                                        <input type="date" name="bookingDate" value={formData.bookingDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.bookingDate ? 'input-error' : ''}`} />
-                                    </InputGroup>
-                                    <InputGroup label="預約時段" required error={errors.bookingTime} id="bookingTime">
-                                        <select name="bookingTime" value={formData.bookingTime || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 appearance-none ${errors.bookingTime ? 'input-error' : ''}`}>
-                                            <option value="">請選擇時段</option>
-                                            {timeSlots.map(time => (
-                                                <option key={time} value={time}>{time}</option>
-                                            ))}
-                                        </select>
-                                    </InputGroup>
-                                </div>
-                            )}
-                        </section>
-
-                        {/* Pet Info */}
-                        <section className="cute-card p-8 space-y-6">
                             <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
                                 <span className="text-2xl">🐾</span>
                                 <h3 className="text-lg font-black text-soosi-dark">寵物詳細資料</h3>
                             </div>
+                            
+                            {/* 新增：狗/貓選擇 */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">
+                                    <span className="text-soosi-red text-xs">●</span> 種類
+                                </label>
+                                <div className="flex gap-3">
+                                    <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${formData.pet_type === 'dog' ? 'bg-soosi-wood text-white border-soosi-wood shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                        <input type="radio" name="pet_type" value="dog" checked={formData.pet_type === 'dog'} onChange={(e) => handleChange('pet_type', e.target.value)} className="hidden" />
+                                        <span className="font-bold">🐶 狗狗</span>
+                                    </label>
+                                    <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${formData.pet_type === 'cat' ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                        <input type="radio" name="pet_type" value="cat" checked={formData.pet_type === 'cat'} onChange={(e) => handleChange('pet_type', e.target.value)} className="hidden" />
+                                        <span className="font-bold">🐱 貓咪</span>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div className="grid md:grid-cols-2 gap-5">
                                 <InputGroup label="寵物名字" required error={errors.pet_name} id="pet_name">
                                     <input type="text" value={formData.pet_name} onChange={e=>handleChange('pet_name', e.target.value)} className={`w-full cute-input px-4 py-3 ${errors.pet_name ? 'input-error' : ''}`} />
@@ -1115,6 +1121,173 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                     )}
                                 </div>
                             </div>
+                        </section>
+
+                        {/* 新增：預約時間區塊 (移到寵物資料下方) */}
+                        <section className="cute-card p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+                            <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
+                                <span className="text-2xl">📅</span>
+                                <h3 className="text-lg font-black text-soosi-dark">
+                                    {isBoarding ? "住宿時間預約" : "美容預約資訊"}
+                                </h3>
+                            </div>
+
+                            {isBoarding ? (
+                                /* 住宿模式顯示 */
+                                <div className="space-y-4">
+                                    <div className="grid md:grid-cols-2 gap-5">
+                                        <InputGroup label="入住日期" required error={errors.checkInDate} id="checkInDate">
+                                            <input type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
+                                        </InputGroup>
+                                        <InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
+                                            <input type="date" name="checkOutDate" value={formData.checkOutDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} />
+                                        </InputGroup>
+                                    </div>
+                                    {/* 自動計算晚數 Badge */}
+                                    {stayDuration && (
+                                        <div className="flex justify-center pt-2 animate-in zoom-in duration-300">
+                                            <div className="bg-gradient-to-r from-soosi-wood to-[#7A5E47] text-white px-6 py-2.5 rounded-full font-bold shadow-lg flex items-center gap-2 transform hover:scale-105 transition-transform">
+                                                <Icon name="moon" size={18} className="text-soosi-accent" />
+                                                <span>共入住 <span className="text-soosi-accent text-lg">{stayDuration}</span> 晚</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {/* 新增：住宿試住確認 */}
+                                    <div className="bg-yellow-50 text-yellow-800 p-4 rounded-2xl text-[11px] leading-relaxed border border-yellow-100 space-y-3">
+                                        <div className="flex items-start gap-2">
+                                            <Icon name="alert-triangle" size={16} className="mt-0.5 shrink-0"/>
+                                            <div>
+                                                <div className="font-bold mb-1">住宿預約注意事項</div>
+                                                <div>需於三天內支付訂金以保留房間。</div>
+                                            </div>
+                                        </div>
+                                        <div className="border-t border-yellow-200 pt-3">
+                                            <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1 mb-2">
+                                                <span className="text-soosi-red text-xs">●</span> 
+                                                是否已在本工作室安親試住？
+                                            </label>
+                                            <div className="flex gap-3">
+                                                <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.hasTrialStay ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                                    <input type="radio" name="hasTrialStay" value={true} checked={formData.hasTrialStay === true} onChange={() => handleChange('hasTrialStay', true)} className="hidden" />
+                                                    <span className="font-bold">是</span>
+                                                </label>
+                                                <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.hasTrialStay === false ? 'bg-soosi-red text-white border-soosi-red' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                                    <input type="radio" name="hasTrialStay" value={false} checked={formData.hasTrialStay === false} onChange={() => handleChange('hasTrialStay', false)} className="hidden" />
+                                                    <span className="font-bold">否</span>
+                                                </label>
+                                            </div>
+                                            {errors.hasTrialStay && <div className="field-error mt-2"><Icon name="alert-circle" size={12}/>{errors.hasTrialStay}</div>}
+                                            {!formData.hasTrialStay && (
+                                                <div className="mt-3 p-3 bg-white rounded-lg border border-yellow-200 text-xs text-yellow-800">
+                                                    請先執行安親試住後再預約住宿。美容可免費2小時安親試住，也可單純安親。
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* 美容模式顯示 */
+<div className="grid md:grid-cols-2 gap-5">
+    <InputGroup label="預約日期" required error={errors.bookingDate} id="bookingDate">
+        <input type="date" name="bookingDate" value={formData.bookingDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.bookingDate ? 'input-error' : ''}`} />
+    </InputGroup>
+    <InputGroup label="預約時段" required error={errors.bookingTime} id="bookingTime">
+        <select name="bookingTime" value={formData.bookingTime || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 appearance-none ${errors.bookingTime ? 'input-error' : ''}`}>
+            <option value="">請選擇時段</option>
+            {timeSlots.map(time => (
+                <option key={time} value={time}>{time}</option>
+            ))}
+        </select>
+    </InputGroup>
+</div>
+
+                            )}
+                        </section>
+
+
+                        {/* 新增：服務內容區塊 (放在預約時間下方) */}
+                        <section className="cute-card p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
+                            <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
+                                <span className="text-2xl">🛁</span>
+                                <h3 className="text-lg font-black text-soosi-dark">服務內容選擇</h3>
+                            </div>
+
+                            {!isBoarding && (
+                                /* 美容模式顯示 */
+                                <div className="mt-6 space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-lg font-black text-soosi-dark">本次服務內容</h3>
+                                        <span className="text-xs text-soosi-red font-bold">請選擇至少一項</span>
+                                    </div>
+                                    
+                                    {/* 動態生成服務按鈕 (美化版) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {[
+                                            { id: 'basic', title: '小美容', desc: '洗澡、剪指甲、剃腳底毛、屁屁毛、肚子毛、擠肛門腺、清耳朵、臉部微修', highlight: true, icon: 'droplets', color: 'text-soosi-pink' },
+                                            { id: 'full', title: '大美容', desc: '包含小美容所有項目，外加全身造型修剪', highlight: true, icon: 'sparkles', color: 'text-soosi-purple' },
+                                            { id: 'partial', title: '局部修剪', desc: '指定部位修剪', highlight: false, icon: 'scissors', color: 'text-gray-500' },
+                                            { id: 'boarding', title: '寵物安親', desc: '提供安親照護服務', highlight: false, icon: 'home', color: 'text-blue-500' },
+                                            { id: 'other', title: '其他項目', desc: '請在下方輸入框說明', highlight: false, icon: 'plus-circle', color: 'text-gray-500' }
+                                        ].map((item) => (
+                                            <label key={item.id} className={`cursor-pointer relative p-5 rounded-xl border-2 transition-all group ${
+                                                formData.service_items.includes(item.id) 
+                                                    ? (item.highlight ? 'border-soosi-wood bg-soosi-wood/10 shadow-lg' : 'border-soosi-green bg-soosi-green/5 shadow-md') 
+                                                    : 'border-gray-200 hover:border-soosi-green/50 bg-white'
+                                            }`}>
+                                                <div className="flex items-start gap-3">
+                                                    {/* 動態圖示區 */}
+                                                    <div className={`mt-0.5 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                                                        formData.service_items.includes(item.id) 
+                                                            ? (item.highlight ? 'bg-soosi-wood text-white' : 'bg-soosi-green text-white') 
+                                                            : 'bg-gray-100 text-gray-400'
+                                                    }`}>
+                                                        <Icon name={item.icon} size={20} className={formData.service_items.includes(item.id) ? "text-white" : ""} />
+                                                    </div>
+                                                    
+                                                    {/* 文字說明區 */}
+                                                    <div className="flex-1">
+                                                        <div className={`font-bold text-base mb-1 ${formData.service_items.includes(item.id) ? (item.highlight ? 'text-soosi-wood' : 'text-soosi-green') : 'text-soosi-dark'}`}>{item.title}</div>
+                                                        <div className={`text-xs leading-relaxed ${formData.service_items.includes(item.id) ? 'text-gray-600' : 'text-gray-400'}`}>{item.desc}</div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* 隱藏的 Checkbox */}
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="hidden" 
+                                                    checked={formData.service_items.includes(item.id)} 
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setFormData(prev => ({ ...prev, service_items: [...prev.service_items, item.id] }));
+                                                        } else {
+                                                            setFormData(prev => ({ ...prev, service_items: prev.service_items.filter(id => id !== item.id) }));
+                                                        }
+                                                        if (errors.service_items) setErrors(prev => ({ ...prev, service_items: null }));
+                                                    }}
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
+                                    
+                                    {errors.service_items && <div className="field-error"><Icon name="alert-circle" size={12}/>{errors.service_items}</div>}
+                                    
+                                    {/* 其他服務項目說明 (僅在選擇「其他項目」時顯示) */}
+                                    {formData.service_items.includes('other') && (
+                                        <div className="mt-4 animate-in fade-in">
+                                            <InputGroup label="請詳細說明其他項目" required error={errors.service_items_other} id="service_items_other">
+                                                <textarea 
+                                                    value={formData.service_items_other || ''} 
+                                                    onChange={(e) => handleChange('service_items_other', e.target.value)}
+                                                    placeholder="例如：只清耳朵、只剪指甲..."
+                                                    className="w-full cute-input px-4 py-3 resize-none"
+                                                    rows="3"
+                                                />
+                                            </InputGroup>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </section>
 {/* 住宿專用表單 (其他細節) */}
                     {isBoarding && (
@@ -1569,7 +1742,7 @@ if(!realtimeSig) newErrors.signature = '請完成簽名';
                                             <span className="bg-white border px-2 py-1 rounded text-xs font-bold text-soosi-dark">受傷醫療上限 $2,000</span>
                                             <span className="bg-white border px-2 py-1 rounded text-xs font-bold text-soosi-dark">意外往生慰撫金上限 $5,000</span>
                                         </div>
-                                        <span className="text-[10px] text-gray-400 mt-1 block">本工作室非醫療機構。超過上述金額部分，不另負擔賠償責任。</span>
+                                        <span className="text-[10px] text-gray-400 mt-1 block">超過上述金額部分，不另負擔賠償責任。</span>
                                     </li>
                                 </ul>
                             </div>

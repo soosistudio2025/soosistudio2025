@@ -40,8 +40,8 @@
     </script>
     
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest" defer></script>
-
+<script src="https://unpkg.com/lucide@latest" defer></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -175,7 +175,12 @@
     <div id="root"></div>
 
 <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- Supabase 初始化 (已填入您的專案資訊) ---
+        const supabaseUrl = 'https://uhrngtsashumvwgzaumm.supabase.co'; 
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVocm5ndHNhc2h1bXZ3Z3phdW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMjMxNDUsImV4cCI6MjA4NDg5OTE0NX0.YDopNd9MHsjV9LFsHWyrxFIcWgQ_s0BMJlNSFqQfiTE';
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
         
         const Icon = ({ name, size = 20, className = "" }) => {
             const iconRef = useRef(null);
@@ -546,9 +551,49 @@ const PriceListPage = ({ onBack }) => {
         });
     };
             
-            const [view, setView] = useState('entry'); 
+const [view, setView] = useState('entry'); 
             const [isBoarding, setIsBoarding] = useState(false);
             const [isSubmitting, setIsSubmitting] = useState(false);
+            const [isUploading, setIsUploading] = useState(false); 
+
+            // --- 處理照片/收據上傳 (整合最新邏輯) ---
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                // 檢查檔案大小 (限制 5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    alert("檔案過大，請上傳小於 5MB 的照片");
+                    return;
+                }
+
+                try {
+                    setIsUploading(true);
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const filePath = `${fileName}`; 
+
+                    const { data, error } = await supabase.storage
+                        .from('receipts')
+                        .upload(filePath, file);
+
+                    if (error) throw error;
+
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('receipts')
+                        .getPublicUrl(filePath);
+                    
+                    setFormData(prev => ({ ...prev, proof_url: publicUrl }));
+                    alert('證明上傳成功！');
+
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    alert('上傳失敗，請稍後再試 (或檢查 SQL Editor 權限)');
+                } finally {
+                    setIsUploading(false);
+                }
+            };
+
             const [errors, setErrors] = useState({});
             const [lineConfirmed, setLineConfirmed] = useState(false);
             
@@ -1422,7 +1467,7 @@ const handleSubmit = () => {
                     {isBoarding && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
                             
-{/* 區塊 1: 住宿美容服務 (邏輯修正：狗強制 / 貓選填) */}
+{/* 區塊 1: 住宿美容服務 (邏輯修正：改為皆可選填，若狗不洗需證明) */}
                             <div className="cute-card p-6 space-y-4 border-2 border-soosi-green/20">
                                 <div className="flex items-center gap-2 border-b border-soosi-green/10 pb-2 mb-2">
                                     <h3 className="font-black text-lg text-soosi-green flex items-center gap-2">
@@ -1431,24 +1476,85 @@ const handleSubmit = () => {
                                 </div>
                                 
                                 <div className="space-y-4">
-                                    {/* 邏輯分流：狗狗直接顯示內容；貓咪顯示 Yes/No 開關 */}
-                                    {formData.pet_type === 'dog' ? (
-                                        <div className="bg-yellow-50 text-yellow-800 text-xs font-bold p-3 rounded-xl border border-yellow-200 mb-4 flex items-center gap-2">
-                                            <Icon name="info" size={16}/>
-                                            <span>狗狗住宿期間須安排洗澡，請直接勾選服務項目。</span>
+                                    {/* 統一改為 Yes/No 選擇 */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-soosi-dark ml-1">
+                                            {formData.pet_type === 'dog' ? '是否要在本館安排洗澡？' : '是否需要在住宿期間安排美容？'}
+                                        </label>
+                                        <div className="flex gap-3 mb-4">
+                                            <PillBtn active={formData.addGrooming === true} onClick={()=>handleChange('addGrooming', true)}>是，我要加購</PillBtn>
+                                            <PillBtn active={formData.addGrooming === false} onClick={()=>handleChange('addGrooming', false)}>
+                                                {formData.pet_type === 'dog' ? '否 (需提供洗澡證明)' : '否，純住宿'}
+                                            </PillBtn>
                                         </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-bold text-soosi-dark ml-1">是否需要在住宿期間安排美容？</label>
-                                            <div className="flex gap-3 mb-4">
-                                                <PillBtn active={formData.addGrooming === true} onClick={()=>handleChange('addGrooming', true)}>是，我要加購</PillBtn>
-                                                <PillBtn active={formData.addGrooming === false} onClick={()=>handleChange('addGrooming', false)}>否，純住宿</PillBtn>
+                                    </div>
+
+{/* 狗狗選「否」時：顯示證明上傳或現場提供選項 */}
+                                    {formData.pet_type === 'dog' && formData.addGrooming === false && (
+                                        <div className="bg-orange-50 p-5 rounded-2xl border border-orange-200 space-y-4 animate-in fade-in relative overflow-hidden">
+                                            <div className="flex items-start gap-2 text-orange-800 text-xs font-bold">
+                                                <Icon name="alert-triangle" size={16} className="shrink-0 mt-0.5"/>
+                                                <div className="leading-relaxed">
+                                                    為確保環境衛生，若未在本館洗澡，<span className="underline">需提供入住前 3 日內之洗澡證明</span>。
+                                                </div>
                                             </div>
+
+                                            {/* 選擇提供方式 */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-orange-800 ml-1">請選擇證明方式：</label>
+                                                <div className="flex gap-3">
+                                                    <button type="button" 
+                                                        onClick={() => setFormData(p => ({ ...p, proof_type: 'onsite', proof_url: '' }))}
+                                                        className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${formData.proof_type === 'onsite' ? 'bg-orange-400 text-white border-orange-400 shadow-md' : 'bg-white text-gray-400 border-orange-100 hover:bg-orange-50'}`}>
+                                                        <Icon name="clipboard" size={16}/> 現場提供紙本
+                                                    </button>
+                                                    <button type="button" 
+                                                        onClick={() => setFormData(p => ({ ...p, proof_type: 'upload' }))}
+                                                        className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${formData.proof_type === 'upload' ? 'bg-orange-400 text-white border-orange-400 shadow-md' : 'bg-white text-gray-400 border-orange-100 hover:bg-orange-50'}`}>
+                                                        <Icon name="upload-cloud" size={16}/> 上傳照片/收據
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* 依選擇顯示不同內容 */}
+                                            {formData.proof_type === 'onsite' && (
+                                                <div className="animate-in fade-in p-3 bg-white/60 rounded-xl text-center text-xs font-bold text-orange-800/70 border border-orange-100">
+                                                    請於入住當天攜帶收據或相關證明文件備查。
+                                                </div>
+                                            )}
+
+{formData.proof_type === 'upload' && (
+                                                <div className="animate-in slide-in-from-top-2">
+                                                    {formData.proof_url ? (
+                                                        <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-green-200 text-green-600 text-xs font-bold shadow-sm">
+                                                            <div className="bg-green-100 p-1 rounded-full"><Icon name="check" size={14}/></div>
+                                                            <span>證明上傳成功！</span>
+                                                            <a href={formData.proof_url} target="_blank" className="ml-auto text-xs bg-green-50 px-2 py-1 rounded-md hover:bg-green-100 transition-colors">查看</a>
+                                                            <button type="button" onClick={()=>setFormData(p=>({...p, proof_url: ''}))} className="text-gray-300 hover:text-red-400 p-1"><Icon name="x" size={14}/></button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="relative group">
+                                                            <input 
+                                                                type="file" 
+                                                                accept="image/*"
+                                                                onChange={handleFileUpload}
+                                                                disabled={isUploading}
+                                                                className="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-100 file:text-orange-700 hover:file:bg-orange-200 transition-all cursor-pointer bg-white rounded-xl border border-orange-100"
+                                                            />
+                                                            {isUploading && (
+                                                                <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center text-xs font-bold text-orange-600 gap-2 backdrop-blur-sm z-10">
+                                                                    <Icon name="loader-2" className="animate-spin" size={16}/> 上傳中...
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
-                                    {/* 服務選項區域：狗狗永遠顯示 || 貓咪選「是」才顯示 */}
-                                    {(formData.pet_type === 'dog' || formData.addGrooming) && (
+                                    {/* 服務選項區域：僅當 addGrooming 為 true 時顯示 */}
+                                    {formData.addGrooming && (
                                         <div className="animate-in fade-in space-y-6 bg-gray-50 p-5 rounded-2xl border border-gray-200 mt-4">
                                             <div className="flex items-center gap-2 border-b border-gray-200 pb-2 mb-2">
                                                 <h4 className="font-bold text-soosi-wood text-sm">請勾選服務項目：</h4>
@@ -2116,7 +2222,7 @@ const handleSubmit = () => {
                                             <li>須完成體內外驅蟲。若發現寄生蟲且無法提供證明，將代為送醫並收取費用 <span className="font-bold text-soosi-red">$500起</span>。</li>
                                         </ul>
                                     </div>
-                                    <p>4. 狗狗入住三天內需於本館洗澡；貓咪不強迫。</p>
+<p>4. 為確保環境衛生與責任釐清，<span className="font-bold text-soosi-red">狗狗入住前 3 日內須有洗澡記錄</span>（可於本館預約或提供他店收據證明）。貓咪不強迫。</p>
                                     <p>5. 狗狗須完成2小時安親測試（不可與住宿同日）；貓咪免安親，但具強烈攻擊/焦慮者不接待。</p>
                                 </div>
                             </div>
@@ -2317,8 +2423,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
-                    // 1. 註冊 Service Worker (請確認你的檔案名稱是 sw.js)
-                    const registration = await navigator.serviceWorker.register('./sw.js');
+// 1. 註冊 Service Worker (更新至 v=3)
+                    const registration = await navigator.serviceWorker.register('./sw.js?v=3');
                     console.log('Service Worker 註冊成功');
 
                     // 2. 監聽更新：當偵測到 sw.js 內容有變動時

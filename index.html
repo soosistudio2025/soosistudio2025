@@ -41,6 +41,7 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest" defer></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -176,8 +177,39 @@
 
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo } = React;
+// --- 工具：圖片壓縮函式 (壓縮至 1.5MB 以下且轉為 JPEG) ---
+            const compressImageFile = async (imageFile) => {
+                // 設定壓縮選項
+                const options = {
+                    maxSizeMB: 1.5,           // 目標壓縮到 1.5MB 左右 (清楚又節省空間)
+                    maxWidthOrHeight: 2048,   // 限制最大邊長為 2K，確保細節夠用
+                    useWebWorker: true,       // 使用多執行緒加速處理
+                    fileType: 'image/jpeg',   // 強制轉為 JPEG 格式以獲得更好壓縮率
+                    initialQuality: 0.85      // 初始畫質參數
+                };
 
-        // --- Supabase 初始化 (已填入您的專案資訊) ---
+                // 如果檔案本來就很小 (小於設定目標)，就直接回傳原檔，不做處理
+                if (imageFile.size / 1024 / 1024 <= options.maxSizeMB) {
+                     return imageFile;
+                }
+
+                try {
+                    console.log(`開始壓縮: 原大小 ${(imageFile.size / 1024 / 1024).toFixed(2)} MB`);
+                    // 執行壓縮
+                    const compressedBlob = await imageCompression(imageFile, options);
+                    console.log(`壓縮完成: 新大小 ${(compressedBlob.size / 1024 / 1024).toFixed(2)} MB`);
+
+                    // 將壓縮後的 Blob 轉回 File 物件，並修改副檔名為 .jpg
+                    const newFileName = imageFile.name.substring(0, imageFile.name.lastIndexOf('.')) + '.jpg';
+                    return new File([compressedBlob], newFileName, { type: 'image/jpeg' });
+
+                } catch (error) {
+                    console.error("圖片壓縮失敗:", error);
+                    // 如果壓縮失敗，拋出錯誤讓主流程知道
+                    throw new Error("圖片處理失敗，請換一張試試看");
+                }
+            };
+
         const supabaseUrl = 'https://uhrngtsashumvwgzaumm.supabase.co'; 
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVocm5ndHNhc2h1bXZ3Z3phdW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMjMxNDUsImV4cCI6MjA4NDg5OTE0NX0.YDopNd9MHsjV9LFsHWyrxFIcWgQ_s0BMJlNSFqQfiTE';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
@@ -556,26 +588,27 @@ const [view, setView] = useState('entry');
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [isUploading, setIsUploading] = useState(false); 
 
-            // --- 處理照片/收據上傳 (整合最新邏輯) ---
+// --- 處理照片/收據上傳 (已加入自動壓縮) ---
             const handleFileUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
-                // 檢查檔案大小 (限制 5MB)
-                if (file.size > 5 * 1024 * 1024) {
-                    alert("檔案過大，請上傳小於 5MB 的照片");
-                    return;
-                }
+                // 移除 5MB 限制警告
 
                 try {
                     setIsUploading(true);
-                    const fileExt = file.name.split('.').pop();
+                    
+                    // ★ 關鍵步驟：先執行壓縮 ★
+                    const compressedFile = await compressImageFile(file);
+
+                    const fileExt = compressedFile.name.split('.').pop(); // 使用壓縮後檔案的副檔名(jpg)
                     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
                     const filePath = `${fileName}`; 
 
+                    // 上傳壓縮後的檔案
                     const { data, error } = await supabase.storage
                         .from('receipts')
-                        .upload(filePath, file);
+                        .upload(filePath, compressedFile);
 
                     if (error) throw error;
 
@@ -588,12 +621,56 @@ const [view, setView] = useState('entry');
 
                 } catch (error) {
                     console.error('Upload error:', error);
-                    alert('上傳失敗，請稍後再試 (或檢查 SQL Editor 權限)');
+                    // 如果是壓縮失敗的錯誤，顯示自定義訊息
+                    alert(error.message || '上傳失敗，請檢查網路或稍後再試');
                 } finally {
                     setIsUploading(false);
+                    // 清空 input value，確保下次選同一張圖也能觸發 onChange
+                    e.target.value = ''; 
                 }
             };
 
+            // --- 處理疫苗手冊上傳 (已加入自動壓縮) ---
+            const [isUploadingVaccine, setIsUploadingVaccine] = useState(false);
+            
+            const handleVaccineUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                // 移除 5MB 限制警告
+
+                try {
+                    setIsUploadingVaccine(true);
+
+                    // ★ 關鍵步驟：先執行壓縮 ★
+                    const compressedFile = await compressImageFile(file);
+
+                    const fileExt = compressedFile.name.split('.').pop();
+                    const fileName = `vaccine_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+                    // 上傳壓縮後的檔案
+                    const { data, error } = await supabase.storage
+                        .from('vaccines')
+                        .upload(fileName, compressedFile);
+
+                    if (error) throw error;
+
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('vaccines')
+                        .getPublicUrl(fileName);
+                    
+                    setFormData(prev => ({ ...prev, vaccine_url: publicUrl }));
+                    alert('疫苗手冊上傳成功！');
+
+                } catch (error) {
+                    console.error('Vaccine upload error:', error);
+                     // 如果是壓縮失敗的錯誤，顯示自定義訊息
+                    alert(error.message || '手冊上傳失敗，請檢查網路或稍後再試');
+                } finally {
+                    setIsUploadingVaccine(false);
+                    e.target.value = '';
+                }
+            };
             const [errors, setErrors] = useState({});
             const [lineConfirmed, setLineConfirmed] = useState(false);
             
@@ -754,39 +831,131 @@ const riskType = useMemo(() => {
                 }
             }, [showFullSig]);
 
-const handleSubmit = () => {
-    const newErrors = {};
-    const required = ['email', 'owner_name', 'phone', 'address', 'emergency_name', 'emergency_phone', 'pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'chip_status', 'medical_status', 'social_aggression', 'social_play'];
-    
-    required.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
-    if(formData.chip_status === '有晶片' && !formData.chip_id) newErrors.chip_status = '請輸入晶片號碼';
-    
-    // 新增：檢查是否選擇了至少一個服務項目（僅在非住宿模式下檢查）
-    if(!isBoarding && (!formData.service_items || formData.service_items.length === 0)) {
-        newErrors.service_items = '請選擇至少一項服務內容';
-    }
-    
-// 修改：住宿模式檢查是否已試住 (僅狗狗需要檢查)
-    if(isBoarding && formData.pet_type === 'dog' && !formData.hasTrialStay) {
-        newErrors.hasTrialStay = '請先執行安親試住後再預約住宿';
-    }
-    
-    if(!lineConfirmed) newErrors.line = '請確認已加入 LINE';
-    if(!allTermsRead) newErrors.signature = '請先完成上方所有契約條款閱讀';
-    if(!realtimeSig) newErrors.signature = '請完成簽名';
-    
-    if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        const firstError = Object.keys(newErrors)[0];
-        const el = document.getElementById(firstError);
-        if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        else alert("請檢查必填欄位");
-        return;
-    }
-    setIsSubmitting(true);
-    // 模擬送出
-    setTimeout(() => { alert("提交成功！"); setIsSubmitting(false); window.location.reload(); }, 1500);
-};
+const handleSubmit = async () => {
+                const newErrors = {};
+                const required = ['email', 'owner_name', 'phone', 'address', 'emergency_name', 'emergency_phone', 'pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'chip_status', 'medical_status', 'social_aggression', 'social_play'];
+                
+                required.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
+                if(formData.chip_status === '有晶片' && !formData.chip_id) newErrors.chip_status = '請輸入晶片號碼';
+                
+                // 驅蟲藥驗證
+                if(formData.deworm === '有' && !formData.deworm_brand) newErrors.deworm_brand = '請輸入驅蟲藥牌子';
+
+                // 美容服務驗證
+                if(!isBoarding && (!formData.service_items || formData.service_items.length === 0)) {
+                    newErrors.service_items = '請選擇至少一項服務內容';
+                }
+                
+                // 住宿試住驗證
+                if(isBoarding && formData.pet_type === 'dog' && !formData.hasTrialStay) {
+                    newErrors.hasTrialStay = '請先執行安親試住後再預約住宿';
+                }
+                
+                if(!lineConfirmed) newErrors.line = '請確認已加入 LINE';
+                if(!allTermsRead) newErrors.signature = '請先完成上方所有契約條款閱讀';
+                if(!realtimeSig) newErrors.signature = '請完成簽名';
+                
+                if (Object.keys(newErrors).length > 0) {
+                    setErrors(newErrors);
+                    const firstError = Object.keys(newErrors)[0];
+                    const el = document.getElementById(firstError);
+                    if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    else alert("請檢查必填欄位");
+                    return;
+                }
+
+                setIsSubmitting(true);
+
+                try {
+                    // 1. 整理飼主資料
+                    const ownerData = {
+                        owner_name: formData.owner_name,
+                        phone: formData.phone,
+                        email: formData.email,
+                        address: formData.address,
+                        owner_id: formData.owner_id,
+                        emergency_name: formData.emergency_name,
+                        emergency_phone: formData.emergency_phone
+                    };
+
+                    // 2. 整理寵物資料 (包含所有詳細調查)
+                    const petData = {
+                        pet_name: formData.pet_name,
+                        pet_type: formData.pet_type,
+                        breed: formData.breed,
+                        weight: formData.weight,
+                        sex: formData.sex,
+                        fix: formData.fix,
+                        age: formData.age || (formData.age_months ? formData.age_months/12 : 0),
+                        is_under_one: formData.is_under_one,
+                        medical_status: formData.medical_status,
+                        medical_history: formData.medical_history || [],
+                        medical_history_other: formData.medical_history_other,
+                        deworm: formData.deworm,
+                        deworm_brand: formData.deworm_brand,
+                        vaccine: formData.vaccine,
+                        vaccine_url: formData.vaccine_url,
+                        chip_status: formData.chip_status,
+                        chip_id: formData.chip_id,
+                        personality: formData.personality,
+                        specialNotes: formData.specialNotes,
+                        grooming_temperament: formData.grooming_temperament,
+                        social_aggression: formData.social_aggression,
+                        social_play: formData.social_play,
+                        pica: formData.pica,
+                        pica_note: formData.pica_note,
+                        diet_type: formData.diet_type || [],
+                        diet_type_other: formData.diet_type_other,
+                        feeding_plan: formData.feeding_plan,
+                        allergies: formData.allergies,
+                        litter_type: formData.litter_type,
+                        hasBoardingExp: formData.hasBoardingExp,
+                        isBarking: formData.isBarking,
+                        isFoodGuarding: formData.isFoodGuarding,
+                        useToiletPad: formData.useToiletPad,
+                        crateTraining: formData.crateTraining || []
+                    };
+
+                    // 3. 整理合約資料
+                    const contractData = {
+                        // 住宿
+                        checkInDate: formData.checkInDate,
+                        checkOutDate: formData.checkOutDate,
+                        stayDuration: stayDuration,
+                        hasTrialStay: formData.hasTrialStay,
+                        addGrooming: formData.addGrooming,
+                        proof_type: formData.proof_type,
+                        proof_url: formData.proof_url,
+                        // 美容
+                        bookingDate: formData.bookingDate,
+                        bookingTime: formData.bookingTime,
+                        service_items: formData.service_items || [],
+                        service_items_other: formData.service_items_other,
+                        // 共通
+                        estimated_price: formData.estimated_price || 0,
+                        signature_url: realtimeSig // 這裡直接存 Base64 簽名圖檔
+                    };
+
+                    // 4. 呼叫後端機器人
+                    const { data, error } = await supabase.rpc('submit_form_data', {
+                        p_owner_data: ownerData,
+                        p_pet_data: petData,
+                        p_contract_data: contractData,
+                        p_is_boarding: isBoarding
+                    });
+
+                    if (error) throw error;
+
+                    alert("🎉 提交成功！");
+                    window.location.reload();
+
+                } catch (error) {
+                    console.error('Submission error:', error);
+                    alert("提交失敗：" + (error.message || "請檢查網路連線"));
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
 
 
             const PillBtn = ({ active, onClick, children, className = "" }) => (
@@ -1401,9 +1570,8 @@ const handleSubmit = () => {
                                                                     type="checkbox" 
                                                                     className="accent-soosi-wood w-3 h-3 mt-0.5" 
                                                                     checked={formData.service_items.includes(spa.id)}
-                                                                    onChange={(e) => {
-                                                                        if (e.target.checked) togglePetArray('service_items', spa.id);
-                                                                        else togglePetArray('service_items', spa.id);
+onChange={(e) => {
+                                                                        toggleArray('service_items', spa.id);
                                                                     }}
                                                                 />
                                                                 <span className="text-[10px] font-bold text-soosi-wood bg-soosi-wood/10 px-1 py-0.5 rounded scale-90 origin-right">{spa.price}</span>
@@ -1796,25 +1964,90 @@ const handleSubmit = () => {
                                     <Icon name="clipboard" size={20}/> {formData.pet_type === 'dog' ? '狗狗' : '貓咪'}生活調查
                                 </h3>
 
-                                {/* 1. 貓狗共通題目 */}
+{/* 1. 貓狗共通題目 */}
                                 <div className="space-y-6">
-                                    {[
-                                        { id: 'hasBoardingExp', label: '有住宿過的經驗嗎', required: true, options: ['有', '沒有'] },
-                                        { id: 'vaccine', label: '每年定期施打疫苗 (請提供疫苗手冊)', required: true, options: ['有', '沒有'] },
-                                        { id: 'deworm', label: '每月定期驅蟲預防', required: true, options: ['有', '無'] },
-                                    ].map((q, idx) => (
-                                        <div key={idx} className="space-y-2">
-                                            <label className="text-sm font-bold text-soosi-dark ml-1">{q.label} {q.required && <span className="text-red-500">*</span>}</label>
-                                            <div className="flex gap-4">
-                                                {q.options.map(opt => (
-                                                    <label key={opt} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData[q.id] === opt ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
-                                                        <input type="radio" name={q.id} value={opt} checked={formData[q.id] === opt} onChange={handleInputChange} className="hidden" />
-                                                        <span className="font-bold">{opt}</span>
-                                                    </label>
-                                                ))}
-                                            </div>
+                                    {/* 住宿經驗 */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-soosi-dark ml-1">有住宿過的經驗嗎 <span className="text-red-500">*</span></label>
+                                        <div className="flex gap-4">
+                                            {['有', '沒有'].map(opt => (
+                                                <label key={opt} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.hasBoardingExp === opt ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                                    <input type="radio" name="hasBoardingExp" value={opt} checked={formData.hasBoardingExp === opt} onChange={handleInputChange} className="hidden" />
+                                                    <span className="font-bold">{opt}</span>
+                                                </label>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
+
+                                    {/* 疫苗題目 + 上傳功能 */}
+                                    <div className="space-y-3">
+                                        <label className="text-sm font-bold text-soosi-dark ml-1">每年定期施打疫苗 (請提供疫苗手冊) <span className="text-red-500">*</span></label>
+                                        <div className="flex gap-4">
+                                            {['有', '沒有'].map(opt => (
+                                                <label key={opt} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.vaccine === opt ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                                    <input type="radio" name="vaccine" value={opt} checked={formData.vaccine === opt} onChange={handleInputChange} className="hidden" />
+                                                    <span className="font-bold">{opt}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        
+                                        {/* 當點選「有」時，顯示上傳區域 */}
+                                        {formData.vaccine === '有' && (
+                                            <div className="animate-in slide-in-from-top-2">
+                                                {formData.vaccine_url ? (
+                                                    <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-green-200 text-green-600 text-xs font-bold shadow-sm">
+                                                        <Icon name="check-circle" size={16}/>
+                                                        <span>手冊上傳完畢</span>
+                                                        <a href={formData.vaccine_url} target="_blank" className="ml-auto text-[10px] bg-green-50 px-2 py-1 rounded">查看</a>
+                                                        <button type="button" onClick={()=>setFormData(p=>({...p, vaccine_url: ''}))} className="text-gray-300 p-1"><Icon name="x" size={14}/></button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="relative">
+                                                        <input 
+                                                            type="file" 
+                                                            accept="image/*"
+                                                            onChange={handleVaccineUpload}
+                                                            disabled={isUploadingVaccine}
+                                                            className="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-soosi-green/10 file:text-soosi-green hover:file:bg-soosi-green/20 transition-all cursor-pointer bg-white rounded-xl border border-gray-200"
+                                                        />
+                                                        {isUploadingVaccine && (
+                                                            <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center text-xs font-bold text-soosi-green gap-2 backdrop-blur-sm z-10">
+                                                                <Icon name="loader-2" className="animate-spin" size={16}/> 上傳手冊中...
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+{/* 驅蟲預防 */}
+                                    <div className="space-y-2" id="deworm_brand">
+                                        <label className="text-sm font-bold text-soosi-dark ml-1">每月定期驅蟲預防 <span className="text-red-500">*</span></label>
+                                        <div className="flex gap-4">
+                                            {['有', '無'].map(opt => (
+                                                <label key={opt} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.deworm === opt ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                                                    <input type="radio" name="deworm" value={opt} checked={formData.deworm === opt} onChange={handleInputChange} className="hidden" />
+                                                    <span className="font-bold">{opt}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        
+                                        {/* 當選擇「有」時，顯示牌子輸入框 */}
+                                        {formData.deworm === '有' && (
+                                            <div className="animate-in slide-in-from-top-2 mt-2">
+                                                <input 
+                                                    type="text" 
+                                                    name="deworm_brand"
+                                                    value={formData.deworm_brand || ''} 
+                                                    onChange={handleInputChange} 
+                                                    placeholder="請輸入驅蟲藥牌子 (例如：全能狗、一錠除...)" 
+                                                    className={`w-full cute-input px-4 py-3 ${errors.deworm_brand ? 'border-red-400 bg-red-50' : 'bg-white'}`}
+                                                />
+                                                {errors.deworm_brand && <div className="field-error mt-1"><Icon name="alert-circle" size={12}/>{errors.deworm_brand}</div>}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* 2. 狗狗專屬題目 */}

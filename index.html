@@ -976,6 +976,16 @@ const [lineConfirmed, setLineConfirmed] = useState(false);
                     params.set('type', 'boarding');
                     if (formData.checkInDate) params.set('in', formData.checkInDate);
                     if (formData.checkOutDate) params.set('out', formData.checkOutDate);
+                    
+                    // --- 🛠️ 修正：將住宿的細項金額也帶入連結 ---
+                    if (formData.price_per_night) params.set('ppn', formData.price_per_night); // 每晚單價
+                    if (formData.holiday_surcharge) params.set('hol', formData.holiday_surcharge); // 假日加價
+                    if (formData.boarding_grooming_price) params.set('bgp', formData.boarding_grooming_price); // 美容加購價
+                    
+                    // 記得帶入是否加購美容的狀態，不然客人端不會顯示美容金額欄位
+                    if (formData.addGrooming !== undefined) params.set('addGrooming', formData.addGrooming);
+                    
+                    // 總金額
                     if (formData.estimated_price) params.set('price', formData.estimated_price);
                 } else {
                     params.set('type', 'grooming');
@@ -985,6 +995,9 @@ const [lineConfirmed, setLineConfirmed] = useState(false);
                 }
                 
                 if (formData.service_items.length > 0) params.set('items', formData.service_items.join(','));
+                
+                // 帶入服務項目備註 (例如：只剪指甲)
+                if (formData.service_items_other) params.set('other', encodeURIComponent(formData.service_items_other));
 
                 const finalUrl = `${window.location.href.split('?')[0].split('#')[0]}?${params.toString()}`;
                 

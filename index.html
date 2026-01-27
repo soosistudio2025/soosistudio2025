@@ -821,9 +821,58 @@ estimated_price: '',
     pet_type: 'dog', 
 isDaycare: false,
     bookingTimeEnd: '', // 新增：安親結束時間
+usePromo50: false, // 50天優惠方案狀態
 });
 
 
+// --- 更新：自動偵測優惠資格 (含住宿加購判斷) ---
+    useEffect(() => {
+        const checkLoyalty = async () => {
+            // 條件 1: 基本資料要有
+            if (isCustomerMode || !formData.phone || !formData.pet_name) return;
+            if (formData.phone.length < 9) return;
+
+            // 條件 2: 必須是「美容頁面」或者「住宿頁面且有加購美容」
+            // 如果是住宿且沒加購，則不檢查，並強制關閉優惠
+            if (isBoarding && !formData.addGrooming) {
+                if (formData.usePromo50) setFormData(prev => ({ ...prev, usePromo50: false }));
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase.rpc('check_loyalty_eligibility', {
+                    p_phone: formData.phone,
+                    p_pet_name: formData.pet_name,
+                    p_check_date: formData.bookingDate || formData.checkInDate || new Date().toISOString().split('T')[0]
+                });
+
+                if (error) throw error;
+
+                console.log("優惠檢查結果:", data);
+
+                if (data.eligible) {
+                    if (!formData.usePromo50) { 
+                        setFormData(prev => ({ ...prev, usePromo50: true }));
+                        alert(`✨ 系統偵測：${data.message}\n已自動為您套用 $200 折扣！`);
+                    }
+                } else {
+                    if (formData.usePromo50) {
+                        setFormData(prev => ({ ...prev, usePromo50: false }));
+                    }
+                }
+
+            } catch (err) {
+                console.error("優惠檢查失敗:", err);
+            }
+        };
+
+            const timer = setTimeout(() => {
+                checkLoyalty();
+            }, 1000);
+
+            return () => clearTimeout(timer);
+
+    }, [formData.phone, formData.pet_name, formData.bookingDate, formData.checkInDate, formData.addGrooming, isBoarding, isCustomerMode]);
 
             // Routing
             useEffect(() => {
@@ -1044,10 +1093,11 @@ const handleSubmit = async () => {
                         proof_url: formData.proof_url,
 // 美容 / 安親
                         bookingDate: formData.bookingDate || formData.checkInDate,
-                        bookingTime: formData.bookingTime,
+bookingTime: formData.bookingTime,
                         bookingTimeEnd: formData.bookingTimeEnd,
                         service_items: formData.service_items || [],
                         service_items_other: formData.service_items_other,
+                        usePromo50: formData.usePromo50, // 新增這行：將優惠狀態寫入資料庫
                         // 共通
                         estimated_price: formData.estimated_price || 0,
                         signature_url: realtimeSig // 這裡直接存 Base64 簽名圖檔
@@ -1733,8 +1783,22 @@ const handleSubmit = async () => {
 
 {/* 預估金額區塊 (美容專用) */}
                                     <div className="mt-6 pt-6 border-t-2 border-dashed border-gray-200">
-                                        <div className="flex items-center gap-2 mb-4">
+                                        <div className="flex items-center justify-between mb-4">
                                             <h4 className="text-base font-black text-soosi-dark">本次服務金額</h4>
+                                            {/* 優惠按鈕 */}
+                                            <button 
+                                                type="button"
+                                                disabled={isCustomerMode}
+                                                onClick={() => setFormData(p => ({ ...p, usePromo50: !p.usePromo50 }))}
+                                                className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${
+                                                    formData.usePromo50 
+                                                    ? 'bg-soosi-red text-white shadow-md shadow-soosi-red/20 ring-2 ring-offset-1 ring-soosi-red' 
+                                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                <Icon name={formData.usePromo50 ? "check-circle" : "tag"} size={14}/>
+                                                {formData.usePromo50 ? "已套用 50天優惠 (-$200)" : "套用 50天優惠"}
+                                            </button>
                                         </div>
                                         
                                         <div className="bg-white p-4 rounded-2xl border-2 border-soosi-wood/20 shadow-sm space-y-4">
@@ -2003,10 +2067,26 @@ const handleSubmit = async () => {
 
 {/* 新增：本次服務金額 (獨立區塊，永遠顯示) */}
                             <div className="cute-card p-6 space-y-4 border-2 border-soosi-wood/20">
-<div className="flex items-center gap-2 border-b border-soosi-wood/10 pb-2 mb-2">
+                                <div className="flex items-center justify-between border-b border-soosi-wood/10 pb-2 mb-2">
                                     <h3 className="font-black text-lg text-soosi-wood flex items-center gap-2">
                                         <Icon name="wallet" size={20}/> 本次{formData.isDaycare ? '安親' : '住宿'}金額
                                     </h3>
+                                    {/* 住宿若有加購美容，也可套用優惠 */}
+                                    {formData.addGrooming && (
+                                        <button 
+                                            type="button"
+                                            disabled={isCustomerMode}
+                                            onClick={() => setFormData(p => ({ ...p, usePromo50: !p.usePromo50 }))}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${
+                                                formData.usePromo50 
+                                                ? 'bg-soosi-red text-white shadow-md shadow-soosi-red/20 ring-2 ring-offset-1 ring-soosi-red' 
+                                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            <Icon name={formData.usePromo50 ? "check-circle" : "tag"} size={14}/>
+                                            {formData.usePromo50 ? "已套用 50天優惠" : "套用 50天優惠"}
+                                        </button>
+                                    )}
                                 </div>
                                 
 <div className="bg-white p-5 rounded-xl border border-soosi-wood/10 shadow-sm space-y-4">

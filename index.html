@@ -816,9 +816,11 @@ const [formData, setFormData] = useState({
     service_type: '', service_type_other: '', legal_agree: false,
     service_items: [], 
     service_items_other: '', 
-    estimated_price: '',
+estimated_price: '',
     hasTrialStay: false,
     pet_type: 'dog', 
+isDaycare: false,
+    bookingTimeEnd: '', // 新增：安親結束時間
 });
 
 
@@ -1040,9 +1042,10 @@ const handleSubmit = async () => {
                         addGrooming: formData.addGrooming,
                         proof_type: formData.proof_type,
                         proof_url: formData.proof_url,
-                        // 美容
-                        bookingDate: formData.bookingDate,
+// 美容 / 安親
+                        bookingDate: formData.bookingDate || formData.checkInDate,
                         bookingTime: formData.bookingTime,
+                        bookingTimeEnd: formData.bookingTimeEnd,
                         service_items: formData.service_items || [],
                         service_items_other: formData.service_items_other,
                         // 共通
@@ -1462,24 +1465,54 @@ const handleSubmit = async () => {
 
 {/* 新增：預約時間區塊 (移到寵物資料下方) */}
                         <section className="cute-card p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-                            <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
-                                <span className="text-2xl">📅</span>
-                                <h3 className="text-lg font-black text-soosi-dark">
-                                    {isBoarding ? "住宿時間預約" : "美容預約資訊"}
-                                </h3>
+<div className="flex items-center justify-between border-b-2 border-dashed border-soosi-wood/10 pb-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">📅</span>
+                                    <h3 className="text-lg font-black text-soosi-dark">
+                                        {isBoarding ? (formData.isDaycare ? "安親時間預約" : "住宿時間預約") : "美容預約資訊"}
+                                    </h3>
+                                </div>
+                                {isBoarding && !isCustomerMode && (
+                                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                                        <button onClick={() => handleChange('isDaycare', false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${!formData.isDaycare ? 'bg-white text-soosi-wood shadow-sm' : 'text-gray-400'}`}>住宿</button>
+                                        <button onClick={() => handleChange('isDaycare', true)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${formData.isDaycare ? 'bg-white text-soosi-wood shadow-sm' : 'text-gray-400'}`}>安親</button>
+                                    </div>
+                                )}
                             </div>
 
                             {isBoarding ? (
-                                /* 住宿模式顯示 */
+                                /* 住宿/安親模式顯示 */
                                 <div className="space-y-4">
-                                    <div className="grid md:grid-cols-2 gap-5">
-                                        <InputGroup label="入住日期" required error={errors.checkInDate} id="checkInDate">
-                                            <input disabled={isCustomerMode} type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
-                                        </InputGroup>
-                                        <InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
-                                            <input disabled={isCustomerMode} type="date" name="checkOutDate" value={formData.checkOutDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} />
-                                        </InputGroup>
-                                    </div>
+{formData.isDaycare ? (
+                                        <div className="space-y-4">
+                                            <InputGroup label="安親日期" required error={errors.checkInDate} id="checkInDate">
+                                                <input disabled={isCustomerMode} type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
+                                            </InputGroup>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <InputGroup label="起始時間" id="bookingTime">
+                                                    <select disabled={isCustomerMode} name="bookingTime" value={formData.bookingTime || ''} onChange={handleInputChange} className="w-full cute-input px-4 py-3 appearance-none">
+                                                        <option value=""></option>
+                                                        {timeSlots.map(time => <option key={time} value={time}>{time}</option>)}
+                                                    </select>
+                                                </InputGroup>
+                                                <InputGroup label="預計接回" id="bookingTimeEnd">
+                                                    <select disabled={isCustomerMode} name="bookingTimeEnd" value={formData.bookingTimeEnd || ''} onChange={handleInputChange} className="w-full cute-input px-4 py-3 appearance-none">
+                                                        <option value=""></option>
+                                                        {timeSlots.map(time => <option key={time} value={time}>{time}</option>)}
+                                                    </select>
+                                                </InputGroup>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="grid md:grid-cols-2 gap-5">
+                                            <InputGroup label="入住日期" required error={errors.checkInDate} id="checkInDate">
+                                                <input disabled={isCustomerMode} type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
+                                            </InputGroup>
+                                            <InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
+                                                <input disabled={isCustomerMode} type="date" name="checkOutDate" value={formData.checkOutDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} />
+                                            </InputGroup>
+                                        </div>
+                                    )}
                                     {/* 自動計算晚數 Badge */}
                                     {stayDuration && (
                                         <div className="flex justify-center pt-2 animate-in zoom-in duration-300">
@@ -1500,8 +1533,8 @@ const handleSubmit = async () => {
                                             </div>
                                         </div>
 
-                                        {/* 修改：加入 formData.pet_type === 'dog' 的判斷 */}
-                                        {formData.pet_type === 'dog' && (
+{/* 修改：狗狗且「非安親」模式才顯示試住問卷 */}
+                                        {formData.pet_type === 'dog' && !formData.isDaycare && (
                                             <div className="border-t border-yellow-200 pt-3">
                                                 <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1 mb-2">
                                                     <span className="text-soosi-red text-xs">●</span> 
@@ -1737,7 +1770,8 @@ const handleSubmit = async () => {
                     {isBoarding && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
                             
-{/* 區塊 1: 住宿美容服務 (邏輯修正：改為皆可選填，若狗不洗需證明) */}
+{/* 區塊 1: 住宿美容服務 (安親模式隱藏) */}
+                            {!formData.isDaycare && (
                             <div className="cute-card p-6 space-y-4 border-2 border-soosi-green/20">
                                 <div className="flex items-center gap-2 border-b border-soosi-green/10 pb-2 mb-2">
                                     <h3 className="font-black text-lg text-soosi-green flex items-center gap-2">
@@ -1965,16 +1999,35 @@ const handleSubmit = async () => {
                                     )}
                                 </div>
                             </div>
+                            )}
 
 {/* 新增：本次服務金額 (獨立區塊，永遠顯示) */}
                             <div className="cute-card p-6 space-y-4 border-2 border-soosi-wood/20">
-                                <div className="flex items-center gap-2 border-b border-soosi-wood/10 pb-2 mb-2">
+<div className="flex items-center gap-2 border-b border-soosi-wood/10 pb-2 mb-2">
                                     <h3 className="font-black text-lg text-soosi-wood flex items-center gap-2">
-                                        <Icon name="wallet" size={20}/> 本次住宿金額試算
+                                        <Icon name="wallet" size={20}/> 本次{formData.isDaycare ? '安親' : '住宿'}金額
                                     </h3>
                                 </div>
                                 
 <div className="bg-white p-5 rounded-xl border border-soosi-wood/10 shadow-sm space-y-4">
+                                    {formData.isDaycare ? (
+                                        <div className="flex flex-col gap-1 animate-in fade-in">
+                                            <label className="text-xs font-bold text-gray-400">安親服務報價</label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-black text-soosi-wood text-xl">$</span>
+                                                <input 
+                                                    type="number" 
+                                                    disabled={isCustomerMode}
+                                                    value={formData.estimated_price || ''} 
+                                                    onChange={handleInputChange}
+                                                    name="estimated_price"
+                                                    placeholder="請輸入總額" 
+                                                    className="w-full cute-input px-3 py-3 text-2xl font-mono font-bold text-soosi-wood"
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
                                     
                                     {/* 1. 住宿費輸入 */}
                                     <div className="flex flex-col gap-1">
@@ -2079,12 +2132,14 @@ const handleSubmit = async () => {
                                                 </span>
                                             </div>
                                             {/* 隱藏欄位：寫入 estimated_price */}
-                                            <input type="hidden" name="estimated_price" value={
+<input type="hidden" name="estimated_price" value={
                                                 Math.round(parseInt(formData.price_per_night || 0) * (stayDuration || 0) * (stayDuration >= 15 ? 0.85 : stayDuration >= 6 ? 0.95 : 1)) 
                                                 + (parseInt(formData.holiday_surcharge || 0))
                                                 + (formData.addGrooming ? parseInt(formData.boarding_grooming_price || 0) : 0)
                                             } />
                                         </div>
+                                    )}
+                                    </>
                                     )}
 
                                     {/* 備註與注意事項 */}

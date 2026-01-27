@@ -582,8 +582,71 @@ const PriceListPage = ({ onBack }) => {
                     {error && <div className="field-error"><Icon name="alert-circle" size={12}/>{error}</div>}
                 </div>
             );
+const HistoryModal = ({ records, onClose, onSelect }) => (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-soosi-dark/40 backdrop-blur-sm animate-in fade-in">
+        <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="bg-soosi-wood p-6 text-white text-center">
+                <h3 className="text-xl font-black">🎉 歡迎回來！</h3>
+                <p className="text-sm opacity-80 mt-1">請選擇要帶入的毛孩資料：</p>
+            </div>
+            <div className="p-6 space-y-3 overflow-y-auto bg-[#F9F7F2]">
+                {records.map((record, index) => (
+                    <button key={index} onClick={() => onSelect(record)} 
+                        className="w-full bg-white p-4 rounded-2xl border-2 border-transparent shadow-sm hover:border-soosi-wood hover:shadow-md transition-all text-left flex items-center gap-4 group">
+                        <div className="w-12 h-12 rounded-full bg-soosi-wood/10 flex items-center justify-center text-soosi-wood font-black text-lg">
+                            {record.pet_name.charAt(0)}
+                        </div>
+                        <div className="flex-1">
+                            <div className="font-black text-soosi-dark text-lg">{record.pet_name}</div>
+                            <div className="flex gap-2 mt-1">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${record.source === 'boarding' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                                    {record.source === 'boarding' ? '住宿紀錄' : '美容紀錄'}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-bold">{new Date(record.created_at).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                        <Icon name="chevron-right" className="text-gray-300 group-hover:text-soosi-wood" />
+                    </button>
+                ))}
+            </div>
+            <div className="p-4 bg-white border-t border-dashed">
+                <button onClick={onClose} className="w-full py-3 rounded-xl text-gray-400 font-bold text-sm">取消搜尋</button>
+            </div>
+        </div>
+    </div>
+);
 
         const App = () => {
+            // --- 放在 const App = () => { 的正下方 ---
+        
+        // Toast 狀態
+        const [toast, setToast] = useState(null);
+
+        // 🌟 自動將原本的 alert 轉換為 Toast (全站統一設定)
+        useEffect(() => {
+            window.alert = (message) => {
+                // 根據訊息內容判斷是成功還是錯誤 (簡單判斷法)
+                const isSuccess = message.includes('成功') || message.includes('✅') || message.includes('歡迎');
+                setToast({ 
+                    message, 
+                    type: isSuccess ? 'success' : 'error' 
+                });
+                
+                // 3秒後自動關閉
+                setTimeout(() => setToast(null), 3000);
+            };
+        }, []);
+
+        // Toast UI 組件 (渲染用)
+        const ToastUI = () => {
+            if (!toast) return null;
+            return (
+                <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-md animate-in slide-in-from-top-4 duration-300 ${toast.type === 'success' ? 'bg-soosi-green/90 text-white shadow-soosi-green/30' : 'bg-red-500/90 text-white shadow-red-500/30'}`}>
+                    <Icon name={toast.type === 'success' ? "check-circle" : "alert-circle"} size={24} className="shrink-0" />
+                    <span className="font-bold text-sm tracking-wide">{toast.message}</span>
+                </div>
+            );
+        };
     // 2. 通用輸入處理 (文字、日期、單選)
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -620,14 +683,128 @@ const [view, setView] = useState('entry');
             const [isBoarding, setIsBoarding] = useState(false);
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [isUploading, setIsUploading] = useState(false); 
+const [isSearching, setIsSearching] = useState(false);
+const [showHistoryModal, setShowHistoryModal] = useState(false);
+const [historyRecords, setHistoryRecords] = useState([]);
+
+// --- 修改後的搜尋舊客邏輯 (改用 RPC 繞過 RLS 限制) ---
+const handleSearchHistory = async () => {
+    if (!formData.phone || formData.phone.length < 9) {
+        alert("⚠️ 請先輸入完整的聯絡電話");
+        return;
+    }
+
+    setIsSearching(true);
+    try {
+        // 🌟 關鍵修改：改用 rpc 呼叫後端函數，而不是直接 select 資料表
+        const { data, error } = await supabase.rpc('search_guest_history', { 
+            phone_input: formData.phone 
+        });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            alert("🔍 查無此電話的過往紀錄");
+            return;
+        }
+
+        const allRecords = data.map(r => {
+            // 判斷來源 (如果是住宿或安親，視為 boarding)
+            const sType = r.raw_data.service_type || '';
+            const source = (sType.includes('住宿') || sType.includes('安親')) ? 'boarding' : 'grooming';
+            
+            return {
+                ...r.raw_data, // 解壓縮 raw_data (包含 pet_name, owner_name 等)
+                id: r.id,
+                created_at: r.created_at,
+                source: source
+            };
+        });
+
+        // --- 核心邏輯：確保每隻毛孩只有一個最新選項 ---
+        const uniquePetsMap = new Map();
+        
+        // 先依照建立時間排序 (最新的在前)
+        allRecords.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        allRecords.forEach(record => {
+            const petName = record.pet_name;
+            if (!petName) return;
+
+            // 如果 Map 裡還沒有這個名字，就存入最新的一筆
+            if (!uniquePetsMap.has(petName)) {
+                uniquePetsMap.set(petName, record);
+            }
+        });
+
+        setHistoryRecords(Array.from(uniquePetsMap.values()));
+        setShowHistoryModal(true);
+
+    } catch (err) {
+        console.error("搜尋舊客失敗:", err);
+        alert("搜尋失敗，請檢查網路或確認後端設定。");
+    } finally {
+        setIsSearching(false);
+    }
+};
+
+const handleApplyHistory = (record) => {
+// 1. 定義要排除的欄位 (這裡加入你指定不要導入的項目)
+    const { 
+        id, created_at, 
+        
+        // --- 1. 排除所有時間欄位 (美容、住宿、安親) ---
+        booking_date, check_in_date, check_out_date,  // 舊格式
+        bookingDate, bookingTime, bookingTimeEnd,     // 美容/安親時間
+        checkInDate, checkOutDate,                    // 住宿/安親日期
+        
+        // --- 2. 排除簽名與優惠狀態 ---
+        signature_url, 
+        use_promo_50, 
+        
+        // --- 3. 排除金額與住宿加購設定 ---
+        addGrooming,              // 住宿期間美容服務 (是否加購)
+        proof_type, proof_url,    // 洗澡證明
+        estimated_price,          // 總金額
+        price_per_night,          // 每晚房價
+        holiday_surcharge,        // 假日加價
+        boarding_grooming_price,  // 住宿美容加購價
+
+        // --- 4. 新增排除：本次服務內容 (避免帶入上次洗什麼) ---
+        service_items,            // 勾選的服務項目 (小美容/大美容/SPA...)
+        service_items_other,      // 其他服務備註
+        
+        // ----------------------------------
+        ...reusableData 
+    } = record;
+
+    setFormData(prev => ({
+        ...prev,
+        ...reusableData,
+        // 確保電話維持正確 (當前輸入的)
+        phone: formData.phone 
+    }));
+
+    // 2. 修正：舊客導入後，直接將 LINE 確認狀態打勾
+    setLineConfirmed(true);
+
+    // 3. 修正：強制停止搜尋按鈕的轉圈圈狀態
+    setIsSearching(false);
+
+    setShowHistoryModal(false);
+    
+    // 智慧提醒
+    if (isBoarding && record.source === 'grooming') {
+        alert(`✅ 已帶入 ${record.pet_name} 的美容資料！\n請記得補填下方的「住宿問卷」喔！`);
+    } else {
+        alert(`✅ 已帶入 ${record.pet_name} 的過往資料。`);
+    }
+};
 
 // --- 處理照片/收據上傳 (已加入自動壓縮) ---
             const handleFileUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
-                // 移除 5MB 限制警告
-
                 try {
                     setIsUploading(true);
                     
@@ -941,8 +1118,15 @@ const riskType = useMemo(() => {
             
 // 條款完成檢查 (邏輯更新：住宿需同時完成4項，美容需完成2項)
             const allTermsRead = useMemo(() => {
-                // 1. 基礎美容條款 (所有人必讀)
-                if (!termsRead.grooming) return false;
+                // --- 修改邏輯開始 ---
+                // 判斷是否需要閱讀美容條款：
+                // 1. 如果不是住宿 (是美容頁面) -> 必讀
+                // 2. 如果是住宿 且 有加購美容 (addGrooming為真) -> 必讀
+                const needGroomingTerms = !isBoarding || (isBoarding && formData.addGrooming);
+                
+                // 1. 基礎美容條款
+                if (needGroomingTerms && !termsRead.grooming) return false;
+                // --- 修改邏輯結束 ---
                 
                 // 2. 住宿條款 (住宿客必讀)
                 if (isBoarding && !termsRead.boarding) return false;
@@ -950,15 +1134,16 @@ const riskType = useMemo(() => {
                 // 3. 高風險判定
                 if (isHighRisk) {
                     // 高風險美容 (高風險必讀)
-                    if (!termsRead.highRiskGrooming) return false;
+                    if (needGroomingTerms && !termsRead.highRiskGrooming) return false;
                     
                     // 高風險住宿 (住宿 + 高風險必讀)
                     if (isBoarding && !termsRead.highRiskBoarding) return false;
                 }
                 
                 return true;
-            }, [isBoarding, isHighRisk, termsRead]);
+            }, [isBoarding, isHighRisk, termsRead, formData.addGrooming]); // 加入 formData.addGrooming 依賴
 
+        
             const handleChange = (field, value) => {
                 setFormData(prev => ({ ...prev, [field]: value }));
                 if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
@@ -1083,6 +1268,7 @@ const handleSubmit = async () => {
 
                     // 3. 整理合約資料
                     const contractData = {
+                        raw_data: formData,
                         // 住宿
                         checkInDate: formData.checkInDate,
                         checkOutDate: formData.checkOutDate,
@@ -1091,9 +1277,9 @@ const handleSubmit = async () => {
                         addGrooming: formData.addGrooming,
                         proof_type: formData.proof_type,
                         proof_url: formData.proof_url,
-// 美容 / 安親
+                        // 美容 / 安親
                         bookingDate: formData.bookingDate || formData.checkInDate,
-bookingTime: formData.bookingTime,
+                        bookingTime: formData.bookingTime,
                         bookingTimeEnd: formData.bookingTimeEnd,
                         service_items: formData.service_items || [],
                         service_items_other: formData.service_items_other,
@@ -1212,6 +1398,7 @@ bookingTime: formData.bookingTime,
             // --- 2. 表單 View ---
             return (
                 <div className="min-h-screen pb-32">
+                    <ToastUI />
                     {/* Nav: Logo 放大 */}
                     <nav className="fixed top-0 w-full z-40 bg-white/90 backdrop-blur-xl border-b border-soosi-green/10 shadow-sm transition-all">
                         <div className="px-6 py-3 flex justify-between items-center max-w-3xl mx-auto">
@@ -1301,10 +1488,18 @@ bookingTime: formData.bookingTime,
                                     <input type="text" value={formData.owner_name} onChange={e=>handleChange('owner_name', e.target.value)} className={`w-full cute-input px-4 py-3 ${errors.owner_name ? 'input-error' : ''}`} placeholder="請輸入全名" />
                                 </InputGroup>
                                 <InputGroup label="連絡電話" required error={errors.phone} id="phone">
-                                    <div className="flex gap-2">
-                                        <input type="tel" value={formData.phone} onChange={e=>handleChange('phone', e.target.value)} className={`w-full cute-input px-4 py-3 flex-1 ${errors.phone ? 'input-error' : ''}`} placeholder="0912345678" />
-                                        <button className="px-4 bg-soosi-wood text-white rounded-xl font-bold text-sm shadow-md hover:bg-[#7a5e47] flex items-center gap-1 whitespace-nowrap"><Icon name="search" size={14}/> 舊客</button>
-                                    </div>
+<div className="flex gap-2">
+    <input type="tel" value={formData.phone} onChange={e=>handleChange('phone', e.target.value)} className={`w-full cute-input px-4 py-3 flex-1 ${errors.phone ? 'input-error' : ''}`} placeholder="0912345678" />
+    <button 
+        type="button"
+        onClick={handleSearchHistory}
+        disabled={isSearching}
+        className="px-4 bg-soosi-wood text-white rounded-xl font-bold text-sm shadow-md hover:bg-[#7a5e47] flex items-center gap-1 whitespace-nowrap disabled:opacity-50"
+    >
+        {isSearching ? <Icon name="loader-2" className="animate-spin" size={14}/> : <Icon name="search" size={14}/>}
+        舊客
+    </button>
+</div>
                                 </InputGroup>
                                 <InputGroup label="身分證字號 " required error={errors.id}  id="owner_id">
                                     <input type="text" value={formData.owner_id} onChange={e=>handleChange('owner_id', e.target.value)} className="w-full cute-input px-4 py-3" placeholder="例如: A123456789" />
@@ -1926,7 +2121,6 @@ bookingTime: formData.bookingTime,
                                         <div className="animate-in fade-in space-y-6 bg-gray-50 p-5 rounded-2xl border border-gray-200 mt-4">
                                             <div className="flex items-center gap-2 border-b border-gray-200 pb-2 mb-2">
                                                 <h4 className="font-bold text-soosi-wood text-sm">請勾選服務項目：</h4>
-                                                <span className="text-[10px] bg-soosi-wood/10 text-soosi-wood px-2 py-0.5 rounded-full">與美容預約相同</span>
                                             </div>
 
                                             {/* 基礎與加購服務選單 */}
@@ -2505,18 +2699,20 @@ bookingTime: formData.bookingTime,
 
                             {/* 條款按鈕區塊 */}
 <div className="space-y-4">
-                                {/* 1. 美容條款 (永遠顯示，因為住宿也包含美容) */}
-                                <button type="button" onClick={() => setActiveModal('grooming')} 
-                                    className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${termsRead.grooming ? 'bg-soosi-green/10 border-soosi-green' : 'bg-white border-soosi-green/30 hover:border-soosi-green'}`}>
-                                    <div className="flex items-center gap-3 text-left">
-                                        <div className={`p-2 rounded-lg ${termsRead.grooming ? 'bg-soosi-green text-white' : 'bg-[#E8F1EB] text-soosi-green'}`}><Icon name={termsRead.grooming ? "check" : "scissors"} size={20}/></div>
-                                        <div>
-                                            <div className={`font-bold text-sm text-soosi-dark`}>【犬、貓美容契約條款】</div>
-                                            {!termsRead.grooming && <div className="text-xs text-gray-400">點擊閱讀</div>}
+{/* 1. 美容條款 (修改：住宿且沒加購美容時隱藏) */}
+                                {(!isBoarding || (isBoarding && formData.addGrooming)) && (
+                                    <button type="button" onClick={() => setActiveModal('grooming')} 
+                                        className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${termsRead.grooming ? 'bg-soosi-green/10 border-soosi-green' : 'bg-white border-soosi-green/30 hover:border-soosi-green'}`}>
+                                        <div className="flex items-center gap-3 text-left">
+                                            <div className={`p-2 rounded-lg ${termsRead.grooming ? 'bg-soosi-green text-white' : 'bg-[#E8F1EB] text-soosi-green'}`}><Icon name={termsRead.grooming ? "check" : "scissors"} size={20}/></div>
+                                            <div>
+                                                <div className={`font-bold text-sm text-soosi-dark`}>【犬、貓美容契約條款】</div>
+                                                {!termsRead.grooming && <div className="text-xs text-gray-400">點擊閱讀</div>}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className={`text-xs font-bold px-3 py-1 rounded-full ${termsRead.grooming ? 'bg-soosi-green text-white' : 'bg-gray-100 text-gray-400'}`}>{termsRead.grooming ? '已完成' : '待閱讀'}</div>
-                                </button>
+                                        <div className={`text-xs font-bold px-3 py-1 rounded-full ${termsRead.grooming ? 'bg-soosi-green text-white' : 'bg-gray-100 text-gray-400'}`}>{termsRead.grooming ? '已完成' : '待閱讀'}</div>
+                                    </button>
+                                )}
 
                                 {/* 2. 住宿條款 (僅住宿顯示) */}
                                 {isBoarding && (
@@ -2630,6 +2826,14 @@ onClick={handleRequestLink}
                         )}
                         </section>
                     </main>
+                    {showHistoryModal && (
+                        <HistoryModal 
+                            records={historyRecords} 
+                            onClose={() => setShowHistoryModal(false)} 
+                            onSelect={handleApplyHistory} 
+                        />
+                    )}
+
 <PasswordModal isOpen={showPwdModal} onClose={() => setShowPwdModal(false)} onConfirm={onPasswordVerified} />
                     {/* Fullscreen Signature Modal */}
                     {showFullSig && (
@@ -3007,8 +3211,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
-// 1. 註冊 Service Worker (更新至 v=3)
-                    const registration = await navigator.serviceWorker.register('./sw.js?v=4');
+// 1. 註冊 Service Worker (更新至 v=)
+                    const registration = await navigator.serviceWorker.register('./sw.js?v=5');
                     console.log('Service Worker 註冊成功');
 
                     // 2. 監聽更新：當偵測到 sw.js 內容有變動時
@@ -3031,4 +3235,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>
-

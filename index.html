@@ -630,11 +630,9 @@ const PriceListPage = ({ onBack }) => {
 const LoyaltyProgressCard = ({ info, formData, setFormData, isCustomerMode }) => {
     if (!info || info.count === undefined) return null;
     if (info.count === 0 && !info.message) return null;
-
-    const current = info.count; 
     const isCompleted = info.eligible;
+    const current = isCompleted ? 5 : info.count;
     const deadline = info.deadline;
-
     return (
         <div className={`cute-card p-5 border-2 bg-white relative overflow-hidden animate-in slide-in-from-top-4 duration-500 ${isCompleted ? 'border-soosi-red/30' : 'border-soosi-wood/20'}`}>
             {/* 背景裝飾 */}
@@ -675,7 +673,7 @@ const LoyaltyProgressCard = ({ info, formData, setFormData, isCustomerMode }) =>
                             <span className="text-[9px] font-bold text-gray-400">本輪截止</span>
                             <div className="flex items-center gap-1 bg-red-50 text-soosi-red px-2 py-1 rounded-md border border-red-100">
                                 <Icon name="clock" size={10} />
-                                <span className="text-[10px] font-black">{deadline}</span>
+<span className="text-[10px] font-black">{deadline ? deadline.split('T')[0] : ''}</span>
                             </div>
                         </div>
                     ) : (
@@ -689,8 +687,8 @@ const LoyaltyProgressCard = ({ info, formData, setFormData, isCustomerMode }) =>
             {/* 進度條區域 */}
             <div className="relative px-2 py-2 mb-2">
                 <div className="absolute top-1/2 left-0 w-full h-1.5 bg-gray-100 -translate-y-1/2 rounded-full z-0"></div>
-                <div className="absolute top-1/2 left-0 h-1.5 bg-gradient-to-r from-soosi-wood to-soosi-accent -translate-y-1/2 rounded-full z-0 transition-all duration-1000 ease-out" 
-                     style={{ width: `${Math.min((current / 4) * 100, 100)}%` }}></div>
+<div className="absolute top-1/2 left-0 h-1.5 bg-gradient-to-r from-soosi-wood to-soosi-accent -translate-y-1/2 rounded-full z-0 transition-all duration-1000 ease-out" 
+     style={{ width: `${Math.min(Math.max(0, (current - 1) * 25), 100)}%` }}></div>
 
                 <div className="relative z-10 flex justify-between">
                     {[1, 2, 3, 4].map((step) => {
@@ -719,49 +717,118 @@ const LoyaltyProgressCard = ({ info, formData, setFormData, isCustomerMode }) =>
                 </div>
             </div>
             
-            {/* 提示文字 */}
-            <div className="text-[10px] font-bold text-gray-400 text-center">
+{/* 提示文字 - 修正：直接讀取後端 info.message 以顯示優化文案 */}
+            <div className="text-[10px] font-bold text-gray-400 text-center animate-in fade-in">
                  {isCompleted 
                     ? (formData.usePromo50 ? "折扣已生效，本次消費將折抵 $200" : "點擊上方按鈕即可使用優惠") 
-                    : `還差 ${Math.max(0, 4 - current)} 次即可獲得第 5 次優惠`}
+                    : info.message}
             </div>
         </div>
     );
 };
-        // --- 歷史紀錄選擇彈窗組件 ---
-const HistoryModal = ({ records, onClose, onSelect }) => (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-soosi-dark/40 backdrop-blur-sm animate-in fade-in">
-        <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
-            <div className="bg-soosi-wood p-6 text-white text-center">
-                <h3 className="text-xl font-black">🎉 歡迎回來！</h3>
-                <p className="text-sm opacity-80 mt-1">請選擇要帶入的毛孩資料：</p>
-            </div>
-            <div className="p-6 space-y-3 overflow-y-auto bg-[#F9F7F2]">
-                {records.map((record, index) => (
-                    <button key={index} onClick={() => onSelect(record)} 
-                        className="w-full bg-white p-4 rounded-2xl border-2 border-transparent shadow-sm hover:border-soosi-wood hover:shadow-md transition-all text-left flex items-center gap-4 group">
-                        <div className="w-12 h-12 rounded-full bg-soosi-wood/10 flex items-center justify-center text-soosi-wood font-black text-lg">
-                            {record.pet_name.charAt(0)}
+// --- 優化後的歷史紀錄彈窗 (兩階段選擇) ---
+const HistoryModal = ({ records, onClose, onSelect }) => {
+    // 記錄當前選中的寵物 (null 代表在第一層列表)
+    const [selectedPet, setSelectedPet] = useState(null);
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-soosi-dark/40 backdrop-blur-sm animate-in fade-in">
+            <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+                
+                {/* Header */}
+                <div className="bg-soosi-wood p-6 text-white text-center relative">
+                    {selectedPet && (
+                        <button onClick={() => setSelectedPet(null)} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <Icon name="arrow-left" size={20}/>
+                        </button>
+                    )}
+                    <h3 className="text-xl font-black">
+                        {selectedPet ? `選擇 ${selectedPet.name} 的紀錄` : "🎉 歡迎回來！"}
+                    </h3>
+                    <p className="text-sm opacity-80 mt-1">
+                        {selectedPet ? "請問要帶入哪種服務資料？" : "請選擇要帶入的毛孩："}
+                    </p>
+                </div>
+
+                {/* Content Area */}
+                <div className="p-6 space-y-3 overflow-y-auto bg-[#F9F7F2] min-h-[200px]">
+                    {!selectedPet ? (
+                        // 第一層：顯示寵物列表
+                        records.map((pet, index) => (
+                            <button key={index} onClick={() => setSelectedPet(pet)} 
+                                className="w-full bg-white p-4 rounded-2xl border-2 border-transparent shadow-sm hover:border-soosi-wood hover:shadow-md transition-all text-left flex items-center gap-4 group">
+                                <div className="w-12 h-12 rounded-full bg-soosi-wood/10 flex items-center justify-center text-soosi-wood font-black text-lg">
+                                    {pet.name.charAt(0)}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="font-black text-soosi-dark text-lg">{pet.name}</div>
+                                    <div className="flex gap-2 mt-1">
+                                        {/* 顯示該寵物有哪些類型的紀錄 */}
+                                        {pet.grooming && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-bold">有美容紀錄</span>}
+                                        {pet.boarding && <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 font-bold">有住宿紀錄</span>}
+                                    </div>
+                                </div>
+                                <Icon name="chevron-right" className="text-gray-300 group-hover:text-soosi-wood" />
+                            </button>
+                        ))
+                    ) : (
+                        // 第二層：顯示該寵物的 美容/住宿 選項
+                        <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                            {/* 美容選項 */}
+                            {selectedPet.grooming ? (
+                                <button onClick={() => onSelect(selectedPet.grooming)} className="w-full bg-white p-5 rounded-2xl border-2 border-blue-100 hover:border-blue-400 shadow-sm hover:shadow-md transition-all text-left group relative overflow-hidden">
+                                    <div className="absolute right-0 top-0 p-10 bg-blue-50 rounded-bl-full -mr-10 -mt-10 opacity-50 group-hover:scale-110 transition-transform"></div>
+                                    <div className="relative z-10 flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                                            <Icon name="scissors" size={20}/>
+                                        </div>
+                                        <div>
+                                            <div className="font-black text-blue-800 text-lg">帶入「美容」資料</div>
+                                            <div className="text-xs text-gray-400 font-bold mt-1">
+                                                上次消費：{new Date(selectedPet.grooming.created_at).toLocaleDateString()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </button>
+                            ) : (
+                                <div className="p-4 text-center text-gray-400 text-xs bg-gray-100 rounded-xl border border-dashed border-gray-300">
+                                    此寵物尚無美容紀錄
+                                </div>
+                            )}
+
+                            {/* 住宿選項 */}
+                            {selectedPet.boarding ? (
+                                <button onClick={() => onSelect(selectedPet.boarding)} className="w-full bg-white p-5 rounded-2xl border-2 border-orange-100 hover:border-orange-400 shadow-sm hover:shadow-md transition-all text-left group relative overflow-hidden">
+                                    <div className="absolute right-0 top-0 p-10 bg-orange-50 rounded-bl-full -mr-10 -mt-10 opacity-50 group-hover:scale-110 transition-transform"></div>
+                                    <div className="relative z-10 flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                                            <Icon name="home" size={20}/>
+                                        </div>
+                                        <div>
+                                            <div className="font-black text-orange-800 text-lg">帶入「住宿」資料</div>
+                                            <div className="text-xs text-gray-400 font-bold mt-1">
+                                                上次消費：{new Date(selectedPet.boarding.created_at).toLocaleDateString()}
+                                            </div>
+                                            <div className="text-[10px] text-orange-400 mt-1">包含飲食、排泄習慣等詳細資料</div>
+                                        </div>
+                                    </div>
+                                </button>
+                            ) : (
+                                <div className="p-4 text-center text-gray-400 text-xs bg-gray-100 rounded-xl border border-dashed border-gray-300">
+                                    此寵物尚無住宿紀錄
+                                </div>
+                            )}
                         </div>
-                        <div className="flex-1">
-                            <div className="font-black text-soosi-dark text-lg">{record.pet_name}</div>
-                            <div className="flex gap-2 mt-1">
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${record.source === 'boarding' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
-                                    {record.source === 'boarding' ? '住宿紀錄' : '美容紀錄'}
-                                </span>
-                                <span className="text-[10px] text-gray-400 font-bold">{new Date(record.created_at).toLocaleDateString()}</span>
-                            </div>
-                        </div>
-                        <Icon name="chevron-right" className="text-gray-300 group-hover:text-soosi-wood" />
-                    </button>
-                ))}
-            </div>
-            <div className="p-4 bg-white border-t border-dashed">
-                <button onClick={onClose} className="w-full py-3 rounded-xl text-gray-400 font-bold text-sm">取消搜尋</button>
+                    )}
+                </div>
+
+                <div className="p-4 bg-white border-t border-dashed">
+                    <button onClick={onClose} className="w-full py-3 rounded-xl text-gray-400 font-bold text-sm hover:bg-gray-50 transition-colors">取消搜尋</button>
+                </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
         const App = () => {
         
@@ -855,38 +922,77 @@ const handleSearchHistory = async () => {
         }
 
 const allRecords = data.map(r => {
-            // 🌟 修正重點：因為資料庫結構有變，我們需要多挖一層 (r.raw_data.raw_data)
-            // 如果是舊資料可能在第一層，新資料在第二層，這裡做個相容判斷
+            // 1. 優先使用資料庫欄位 (r.service_type)，若無則找 JSON 內的
+            const dbType = r.service_type || '';
             const innerData = r.raw_data.raw_data || r.raw_data || {};
+            const jsonType = innerData.service_type || r.raw_data.service_type || '';
             
-            const sType = innerData.service_type || r.raw_data.service_type || '';
-            const source = (sType.includes('住宿') || sType.includes('安親') || sType === 'boarding' || sType === 'daycare') ? 'boarding' : 'grooming';
+            // 2. 綜合判斷 (只要任一處顯示為住宿/安親，就視為住宿)
+            const isBoardingRecord = 
+                dbType === 'boarding' || dbType === 'daycare' || 
+                jsonType.includes('住宿') || jsonType.includes('安親');
+
+            const source = isBoardingRecord ? 'boarding' : 'grooming';
             
             return {
-                ...innerData, // 展開內層資料 (這裡面才有 pet_name)
+                ...innerData, 
                 id: r.id,
                 created_at: r.created_at,
                 source: source
             };
         });
 
-        // --- 核心邏輯：確保每隻毛孩只有一個最新選項 ---
-        const uniquePetsMap = new Map();
-        
-        // 先依照建立時間排序 (最新的在前)
-        allRecords.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+// --- 核心邏輯優化：先以「名字」分組，每隻寵物底下保留「最新美容」與「最新住宿」 ---
+        const petsGroup = {};
 
-        allRecords.forEach(record => {
-            const petName = record.pet_name;
+        // 依照時間排序 (最新的在前)
+        data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        data.forEach(r => {
+            // 判斷服務類型
+            const dbType = r.service_type || '';
+            const innerData = r.raw_data.raw_data || r.raw_data || {};
+            const jsonType = innerData.service_type || r.raw_data.service_type || '';
+            
+            const isBoardingRecord = 
+                dbType === 'boarding' || dbType === 'daycare' || 
+                jsonType.includes('住宿') || jsonType.includes('安親');
+
+            const source = isBoardingRecord ? 'boarding' : 'grooming';
+            
+            // 準備完整的紀錄物件
+            const finalRecord = {
+                ...innerData,
+                id: r.id,
+                created_at: r.created_at,
+                source: source
+            };
+
+            const petName = finalRecord.pet_name;
             if (!petName) return;
 
-            // 如果 Map 裡還沒有這個名字，就存入最新的一筆
-            if (!uniquePetsMap.has(petName)) {
-                uniquePetsMap.set(petName, record);
+            // 初始化該寵物的欄位
+            if (!petsGroup[petName]) {
+                petsGroup[petName] = { 
+                    name: petName, 
+                    grooming: null, 
+                    boarding: null,
+                    lastSeen: finalRecord.created_at // 用於排序寵物列表
+                };
+            }
+
+            // 如果該類型還沒有存入紀錄，就存入 (因為已經按時間排序，所以第一個遇到的一定是最新的)
+            if (source === 'grooming' && !petsGroup[petName].grooming) {
+                petsGroup[petName].grooming = finalRecord;
+            } else if (source === 'boarding' && !petsGroup[petName].boarding) {
+                petsGroup[petName].boarding = finalRecord;
             }
         });
 
-        setHistoryRecords(Array.from(uniquePetsMap.values()));
+        // 轉為陣列並排序 (最近有來的寵物排上面)
+        const sortedPets = Object.values(petsGroup).sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
+
+        setHistoryRecords(sortedPets);
         setShowHistoryModal(true);
 
     } catch (err) {
@@ -2994,17 +3100,17 @@ return allServices.map((item) => (
                             </div>
                             )}
 
-                                    {/* ★ 集點卡 (傳入控制參數) ★ */}
-                                    {loyaltyInfo && (
-                                        <div className="mb-6">
-                                            <LoyaltyProgressCard 
-                                                info={loyaltyInfo} 
-                                                formData={formData}        // 傳入表單資料
-                                                setFormData={setFormData}  // 傳入設定函數
-                                                isCustomerMode={isCustomerMode} // 傳入是否為客人模式(鎖定)
-                                            />
-                                        </div>
-                                    )}
+{/* ★ 集點卡：美容模式永遠顯示；住宿模式只有在「加購洗澡」時才顯示 ★ */}
+{loyaltyInfo && (!isBoarding || formData.addGrooming) && (
+    <div className="mb-6">
+        <LoyaltyProgressCard 
+            info={loyaltyInfo} 
+            formData={formData}        
+            setFormData={setFormData}  
+            isCustomerMode={isCustomerMode} 
+        />
+    </div>
+)}
 
 {/* 新增：本次服務金額 (獨立區塊，永遠顯示) */}
                             <div className="cute-card p-6 space-y-4 border-2 border-soosi-wood/20">
@@ -3075,7 +3181,7 @@ return allServices.map((item) => (
                                         if (pet.addGrooming) {
                                             return (
                                                 <div key={idx} className="flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 border-t border-dashed border-gray-200 pt-2 mt-2">
-                                                    <label className="text-xs font-bold text-gray-400">C. 美容/SPA 加購 ({pet.pet_name || `寵物${idx+1}`})</label>
+                                                    <label className="text-xs font-bold text-gray-400">C. 美容/SPA 費用 ({pet.pet_name || `寵物${idx+1}`})</label>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-black text-soosi-green">$</span>
                                                         <input 

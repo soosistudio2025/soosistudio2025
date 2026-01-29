@@ -752,6 +752,12 @@ const HistoryModal = ({ records, onClose, onSelect }) => {
 
                 {/* Content Area */}
                 <div className="p-6 space-y-3 overflow-y-auto bg-[#F9F7F2] min-h-[200px]">
+                    {!selectedPet && (
+        <button onClick={() => onSelect({ ownerOnly: true, ...records[0].grooming || records[0].boarding })}
+            className="w-full py-3 mb-2 bg-soosi-green/10 text-soosi-green border-2 border-dashed border-soosi-green/30 rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-soosi-green/20 transition-all">
+            <Icon name="user" size={18}/> 僅填入飼主資料 (不帶入毛孩)
+        </button>
+    )}
                     {!selectedPet ? (
                         // 第一層：顯示寵物列表
                         records.map((pet, index) => (
@@ -1004,7 +1010,24 @@ const allRecords = data.map(r => {
 };
 
 const handleApplyHistory = (record) => {
-    // 1. 定義要排除的欄位
+    // 如果是「僅填入飼主資料」模式
+    if (record.ownerOnly) {
+        setFormData(prev => ({
+            ...prev,
+            owner_name: record.owner_name,
+            phone: record.phone,
+            email: record.email,
+            address: record.address,
+            owner_id: record.owner_id,
+            emergency_name: record.emergency_name,
+            emergency_phone: record.emergency_phone
+        }));
+        setLineConfirmed(true);
+        setShowHistoryModal(false);
+        alert("✅ 已填入基本資料。");
+        return;
+    }
+        // 1. 定義要排除的欄位
     const { 
         id, created_at, 
         

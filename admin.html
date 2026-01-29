@@ -598,62 +598,121 @@
                 </div>
             );
         };
-        // --- 美容報告生成器 Modal ---
+// --- 智慧報告生成器 (支援 美容完工 / 住宿日記 / 住宿退房) ---
         const ReportGeneratorModal = ({ isOpen, onClose, order }) => {
+            const [activeTab, setActiveTab] = useState('finish'); // 'daily'(日記) 或 'finish'(完工/退房)
+            
+            // 資料狀態
             const [reportData, setReportData] = useState({
-                general: '',
-                skin: '',
+                // 通用
                 feeDetail: '',
-                overtime: ''
-            });
+                overtime: '',
+                // 美容/退房專用
+                general: '精神食慾良好，狀況穩定。', 
+                skin: '皮膚檢查無明顯異常。',
+// 住宿日記專用
+                dailyMood: '🟢 開心',
+                dailyMoodCustom: '', // ✨ 新增
+                dailyEat: '🟢 完食',
+                dailyEatCustom: '', // ✨ 新增
+                dailyToilet: '🟢 正常',
+                dailyToiletCustom: '', // ✨ 新增
+                dailyCare: '⚪ 無',
+                dailyCareCustom: '', // ✨ 新增
+                dailyNote: ''            });
 
-            // 初始化資料 (自動帶入)
+            // 初始化：判斷訂單類型與預設值
             useEffect(() => {
                 if (isOpen && order) {
-                    // 1. 日期
-                    const dateStr = order.booking_date || order.check_in_date || new Date().toISOString().split('T')[0];
+                    const isBoarding = ['boarding', 'daycare'].includes(order.service_type);
                     
-                    // 2. 費用 (預設帶入總金額)
+                    // 預設 Tab：如果是住宿，預設顯示「每日日記」；美容則只有「完工」
+                    setActiveTab(isBoarding ? 'daily' : 'finish');
+
+                    // 1. 日期處理
+                    const today = new Date();
+                    const dateStr = `${today.getMonth() + 1}/${today.getDate()}`;
+                    
+                    // 2. 費用預設
                     const feeStr = `本次消費總計：$${order.total_price}`;
 
-                    setReportData({
-                        general: '精神食慾良好，洗澡過程配合。', // 預設罐頭文字，可修改
-                        skin: '皮膚狀況正常，無發現明顯外傷或紅腫。', // 預設罐頭文字
+                    setReportData(prev => ({
+                        ...prev,
                         feeDetail: feeStr,
-                        overtime: ''
-                    });
+                        dailyNote: '今天在遊戲區玩得很開心喔！', // 日記預設文案
+                        overtime: '' // 重置逾時費
+                    }));
                 }
             }, [isOpen, order]);
 
             if (!isOpen || !order) return null;
 
-            // 產生最終文字
+            const isBoarding = ['boarding', 'daycare'].includes(order.service_type);
+
+            // --- 核心：產生文字邏輯 ---
             const generateText = () => {
-                // 處理寵物名與服務類型 (自動偵測)
+                const petsName = order.booking_pets.map(p => p.pet_name).join('、');
+                const today = new Date();
+                const dateText = `${today.getMonth() + 1}/${today.getDate()}`;
+
+// --- A. 住宿每日日記模式 (數位化 PDF) ---
+if (isBoarding && activeTab === 'daily') {
+    const mood = reportData.dailyMood === '⭐ 其他...' ? reportData.dailyMoodCustom : reportData.dailyMood;
+    const eat = reportData.dailyEat === '⭐ 其他...' ? reportData.dailyEatCustom : reportData.dailyEat;
+    const toilet = reportData.dailyToilet === '⭐ 其他...' ? reportData.dailyToiletCustom : reportData.dailyToilet;
+    
+    // 🌟 修改：只有在不是「⚪ 無」的情況下才產生這行文字
+    const careLine = reportData.dailyCare !== '⚪ 無' 
+        ? `🏥 特殊照顧/投藥紀錄：${reportData.dailyCare === '⭐ 其他...' ? reportData.dailyCareCustom : reportData.dailyCare}\n` 
+        : '';
+
+    return `【${dateText} 住宿日記 📝】\n` +
+           `我是 ${petsName} ～這是今天的住宿狀況回報：\n\n` +
+           `✨ 精神狀況：${mood}\n` +
+           `🥣 用餐情形：${eat}\n` +
+           `💩 排泄狀況：${toilet}\n` +
+           `${careLine}\n` + // 🌟 這裡會根據是否有填寫來決定要不要換行顯示
+           `📝 小管家筆記：\n${reportData.dailyNote}\n\n` +
+           `📸 (照片/影片將另行傳送)\n` +
+           `--------------------------------\n` +
+           `有任何問題隨時都可以詢問喔！`;
+}
+
+                // --- B. 完工/退房通知模式 (包含美容與住宿退房) ---
+                // 處理寵物名與服務類型
                 const petInfo = order.booking_pets.map(p => {
                     let service = '美容';
-                    if (p.service_items?.includes('basic')) service = '小美容';
-                    if (p.service_items?.includes('full')) service = '大美容';
-                    if (order.service_type === 'boarding') service += '(住宿)';
+                    if (order.service_type === 'boarding') service = '住宿退房';
+                    else if (order.service_type === 'daycare') service = '安親接回';
+                    else {
+                        if (p.service_items?.includes('basic')) service = '小美容';
+                        if (p.service_items?.includes('full')) service = '大美容';
+                    }
                     return `${p.pet_name}(${service})`;
                 }).join('、');
 
-                // 處理日期 (格式化)
-                const dateObj = new Date(order.booking_date || order.check_in_date || Date.now());
-                const dateText = `${dateObj.getMonth()+1}/${dateObj.getDate()}`;
+// --- B. 完工/退房通知模式 ---
+const baseInfo = `【${dateText} ${petInfo}】\n` +
+                 `整體狀況 - ${reportData.general}\n` +
+                 `皮膚狀況 - ${reportData.skin}\n\n` +
+                 `費用明細：\n${reportData.feeDetail}\n\n` +
+                 `--------------------------------\n` +
+                 `🎉 可以來接 [ ${petsName} ] 回家囉!\n`;
 
-                const petsName = order.booking_pets.map(p => p.pet_name).join('、');
+// 🌟 住宿/安親：移除逾時費，加上感謝語
+if (isBoarding) {
+    return baseInfo +
+           `謝謝你們的信任，期待下次再來玩～～\n` +
+           `—\n` +
+           `有任何問題隨時都可以詢問~`;
+} 
 
-                return `【${dateText} ${petInfo}】\n` +
-                       `整體狀況 - ${reportData.general}\n` +
-                       `皮膚狀況 - ${reportData.skin}\n\n` +
-                       `費用明細：\n${reportData.feeDetail}\n\n` +
-                       `--------------------------------\n` +
-                       `🎉 可以來接 [ ${petsName} ] 回家囉!\n` +
-                       `請於通知後兩小時內將毛孩接回，逾時將依安親照顧費收費，未滿一小時以一小時計算：\n` +
-                       `${reportData.overtime ? reportData.overtime : '(尚未選擇費率)'}\n` +
-                       `—\n` +
-                       `有任何問題隨時都可以詢問~`;
+// 🌟 美容：保留逾時費提醒
+return baseInfo +
+       `請於通知後兩小時內將毛孩接回，逾時將依安親照顧費收費，未滿一小時以一小時計算：\n` +
+       `${reportData.overtime ? reportData.overtime : '(尚未選擇費率)'}\n` +
+       `—\n` +
+       `有任何問題隨時都可以詢問~`;
             };
 
             const handleCopy = () => {
@@ -668,57 +727,141 @@
                 <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95">
                         
-                        {/* Header */}
-                        <div className="bg-soosi-wood p-5 text-white flex justify-between items-center rounded-t-[2rem] shrink-0">
-                            <h3 className="font-black text-lg flex items-center gap-2"><Icon name="clipboard-list"/> 美容完工報告</h3>
-                            <button onClick={onClose}><Icon name="x"/></button>
+                        {/* Header & Tabs */}
+                        <div className="bg-soosi-wood p-5 text-white rounded-t-[2rem] shrink-0">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-black text-lg flex items-center gap-2"><Icon name="message-square"/> 訊息產生器</h3>
+                                <button onClick={onClose}><Icon name="x"/></button>
+                            </div>
+                            
+                            {/* 住宿單顯示分頁切換 */}
+                            {isBoarding && (
+                                <div className="flex bg-black/20 p-1 rounded-xl">
+                                    <button onClick={() => setActiveTab('daily')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'daily' ? 'bg-white text-soosi-wood shadow-md' : 'text-white/70 hover:text-white'}`}>
+                                        📝 每日日記
+                                    </button>
+                                    <button onClick={() => setActiveTab('finish')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'finish' ? 'bg-white text-soosi-wood shadow-md' : 'text-white/70 hover:text-white'}`}>
+                                        🏠 退房通知
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Body */}
-                        <div className="p-6 overflow-y-auto space-y-5 bg-[#F9F7F2]">
+                        <div className="p-6 overflow-y-auto space-y-5 bg-[#F9F7F2] flex-1">
                             
-                            {/* 1. 狀況填寫 */}
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="text-xs font-bold text-soosi-wood mb-1 block">整體狀況</label>
-                                    <textarea value={reportData.general} onChange={e=>setReportData({...reportData, general: e.target.value})} className="w-full p-2 rounded-xl border border-gray-200 text-sm h-20 resize-none focus:border-soosi-wood outline-none"/>
+                            {/* 模式 A: 每日日記 (住宿專用) */}
+                            {activeTab === 'daily' && (
+                                <div className="space-y-4 animate-in slide-in-from-right">
+<div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { label: '精神', key: 'dailyMood', custom: 'dailyMoodCustom', opts: ['🟢 開心', '🟡 普通', '🔴 鬱卒', '⭐ 其他...'] },
+                                            { label: '食慾', key: 'dailyEat', custom: 'dailyEatCustom', opts: ['🟢 完食', '🟡 吃一半', '🔴 不吃', '⭐ 其他...'] },
+                                            { label: '排泄', key: 'dailyToilet', custom: 'dailyToiletCustom', opts: ['🟢 正常', '🟡 軟便', '🔴 未排', '⭐ 其他...'] }
+                                        ].map((field) => (
+                                            <div key={field.key} className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 block text-center">{field.label}</label>
+                                                <select 
+                                                    value={reportData[field.key]} 
+                                                    onChange={e => setReportData({...reportData, [field.key]: e.target.value})}
+                                                    className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold text-center outline-none focus:border-soosi-wood"
+                                                >
+                                                    {field.opts.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                </select>
+                                                {/* ✨ 選到「其他」時，顯示空白文字框供填寫 */}
+                                                {reportData[field.key] === '⭐ 其他...' && (
+                                                    <input 
+                                                        type="text"
+                                                        placeholder="自行填寫"
+                                                        value={reportData[field.custom]}
+                                                        onChange={e => setReportData({...reportData, [field.custom]: e.target.value})}
+                                                        className="w-full mt-1 p-1 rounded-lg border border-gray-200 text-[10px] font-bold outline-none focus:border-soosi-wood animate-in fade-in"
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div>
+                                        {/* 🌟 新增：特殊照顧紀錄區 */}
+                                    <div className="bg-white p-3 rounded-xl border border-blue-100 space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                                                <Icon name="pills" size={14}/> 特殊照顧 / 投藥紀錄
+                                            </label>
+                                            <select 
+                                                value={reportData.dailyCare} 
+                                                onChange={e => setReportData({...reportData, dailyCare: e.target.value})}
+                                                className="text-[10px] font-bold border-none bg-transparent text-blue-500 outline-none"
+                                            >
+                                                <option value="⚪ 無">⚪ 無</option>
+                                                <option value="✅ 已完成">✅ 已完成</option>
+                                                <option value="⚠️ 需注意">⚠️ 需注意</option>
+                                                <option value="⭐ 其他...">⭐ 其他...</option>
+                                            </select>
+                                        </div>
+                                        {/* 當狀態不是「無」的時候，顯示補充說明框 */}
+                                        {reportData.dailyCare !== '⚪ 無' && (
+                                            <input 
+                                                type="text"
+                                                placeholder="例如：早晚餵藥、噴口腔噴劑..."
+                                                value={reportData.dailyCareCustom}
+                                                onChange={e => setReportData({...reportData, dailyCareCustom: e.target.value})}
+                                                className="w-full p-2 rounded-lg bg-blue-50/50 border border-blue-100 text-xs font-bold outline-none focus:border-blue-400 animate-in slide-in-from-top-1"
+                                            />
+                                        )}
+                                    </div>
+                                        <label className="text-xs font-bold text-soosi-wood mb-1 block">小管家筆記</label>
+                                        <textarea value={reportData.dailyNote} onChange={e=>setReportData({...reportData, dailyNote: e.target.value})} className="w-full p-3 rounded-xl border border-gray-200 text-sm h-24 resize-none focus:border-soosi-wood outline-none" placeholder="描述今天的互動狀況..."/>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-xs font-bold text-soosi-wood mb-1 block">皮膚狀況</label>
-                                    <textarea value={reportData.skin} onChange={e=>setReportData({...reportData, skin: e.target.value})} className="w-full p-2 rounded-xl border border-gray-200 text-sm h-20 resize-none focus:border-soosi-wood outline-none"/>
-                                </div>
-                            </div>
+                            )}
 
-                            {/* 2. 費用 */}
-                            <div>
-                                <label className="text-xs font-bold text-soosi-wood mb-1 block">費用明細</label>
-                                <textarea value={reportData.feeDetail} onChange={e=>setReportData({...reportData, feeDetail: e.target.value})} className="w-full p-2 rounded-xl border border-gray-200 text-sm h-16 resize-none focus:border-soosi-wood outline-none"/>
-                            </div>
+                            {/* 模式 B: 完工/退房通知 (通用) */}
+                            {activeTab === 'finish' && (
+                                <div className="space-y-4 animate-in slide-in-from-left">
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-xs font-bold text-soosi-wood mb-1 block">整體狀況</label>
+                                            <textarea value={reportData.general} onChange={e=>setReportData({...reportData, general: e.target.value})} className="w-full p-2 rounded-xl border border-gray-200 text-sm h-16 resize-none focus:border-soosi-wood outline-none"/>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-soosi-wood mb-1 block">皮膚/外觀狀況</label>
+                                            <textarea value={reportData.skin} onChange={e=>setReportData({...reportData, skin: e.target.value})} className="w-full p-2 rounded-xl border border-gray-200 text-sm h-16 resize-none focus:border-soosi-wood outline-none"/>
+                                        </div>
+                                    </div>
 
-                            {/* 3. 逾時費率 (快速按鈕) */}
-                            <div className="bg-white p-4 rounded-xl border border-soosi-wood/10">
-                                <label className="text-xs font-bold text-soosi-wood mb-2 block flex items-center gap-1">
-                                    <Icon name="clock" size={12}/> 逾時費率選擇 (點擊帶入)
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                        "小型犬(5kg下)：$80/時",
-                                        "中型犬(5-10kg)：$90/時",
-                                        "大型犬(10kg上)：$100/時",
-                                        "貓咪：$90/時"
-                                    ].map((rate, i) => (
-                                        <button key={i} 
-                                            onClick={() => setReportData({...reportData, overtime: rate})}
-                                            className={`text-[10px] font-bold py-2 px-1 rounded-lg border transition-all ${reportData.overtime === rate ? 'bg-soosi-wood text-white border-soosi-wood' : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100'}`}>
-                                            {rate}
-                                        </button>
-                                    ))}
+                                    <div>
+                                        <label className="text-xs font-bold text-soosi-wood mb-1 block">費用明細</label>
+                                        <textarea value={reportData.feeDetail} onChange={e=>setReportData({...reportData, feeDetail: e.target.value})} className="w-full p-2 rounded-xl border border-gray-200 text-sm h-16 resize-none focus:border-soosi-wood outline-none"/>
+                                    </div>
+{/* 🌟 修改：只有在美容模式 (非住宿) 下才顯示逾時費率按鈕 */}
+{!isBoarding && activeTab === 'finish' && (
+    <div className="bg-white p-3 rounded-xl border border-soosi-wood/10">
+        <label className="text-xs font-bold text-soosi-wood mb-2 block flex items-center gap-1">
+            <Icon name="clock" size={12}/> 逾時費率 (點擊帶入)
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+            {[
+                "小型犬(5kg下)：$80/時",
+                "中型犬(5-10kg)：$90/時",
+                "大型犬(10kg上)：$100/時",
+                "貓咪：$90/時"
+            ].map((rate, i) => (
+                <button key={i} 
+                    onClick={() => setReportData({...reportData, overtime: rate})}
+                    className={`text-[9px] font-bold py-2 px-1 rounded-lg border transition-all ${reportData.overtime === rate ? 'bg-soosi-wood text-white border-soosi-wood' : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100'}`}>
+                    {rate}
+                </button>
+            ))}
+        </div>
+    </div>
+)}
                                 </div>
-                            </div>
+                            )}
 
                             {/* 預覽區塊 */}
                             <div className="bg-gray-100 p-4 rounded-xl text-xs text-gray-600 leading-relaxed font-mono whitespace-pre-wrap border border-dashed border-gray-300 relative">
-                                <div className="absolute top-2 right-2 text-[10px] text-gray-300 font-bold">預覽</div>
+                                <div className="absolute top-2 right-2 text-[9px] text-white bg-gray-400 px-2 py-0.5 rounded-full">LINE 預覽</div>
                                 {generateText()}
                             </div>
                         </div>
@@ -726,7 +869,8 @@
                         {/* Footer */}
                         <div className="p-4 border-t border-gray-100 bg-white rounded-b-[2rem] shrink-0">
                             <button onClick={handleCopy} className="w-full py-3 bg-soosi-green text-white rounded-xl font-black shadow-lg flex items-center justify-center gap-2 hover:bg-[#5a7a63] transition-all active:scale-95">
-                                <Icon name="copy" size={18}/> 一鍵複製報告
+                                <Icon name="copy" size={18}/> 
+                                {activeTab === 'daily' ? '複製日記' : '複製通知'}
                             </button>
                         </div>
                     </div>

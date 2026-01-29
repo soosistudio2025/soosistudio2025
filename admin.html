@@ -165,7 +165,7 @@
                 <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl animate-in zoom-in-95">
                         <h3 className="font-black text-lg text-center mb-1">{title}</h3>
-                        <p className="text-[10px] text-gray-400 text-center mb-4 font-bold">請輸入您的帳號密碼以確認變更</p>
+                        <p className="text-[10px] text-gray-400 text-center mb-4 font-bold">請輸入您的密碼以確認變更</p>
                         <input type="password" autoFocus placeholder="您的帳戶密碼" 
                             className="w-full border-2 border-gray-200 rounded-xl p-3 text-center mb-4 outline-none focus:border-soosi-wood"
                             value={pwd} onChange={e=>setPwd(e.target.value)}
@@ -227,12 +227,11 @@
                             </div>
                         ) : (
                             <form onSubmit={handleLogin} className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                                <div className="text-center mb-4">
-                                    <span className={`px-4 py-1 rounded-full text-xs font-black text-white ${loginEmail === ADMIN_EMAIL ? 'bg-soosi-green' : 'bg-soosi-wood'}`}>
-                                        {loginEmail === ADMIN_EMAIL ? '管理員' : '一般員工'}
-                                    </span>
-                                    <p className="text-sm font-bold text-soosi-dark/60 mt-2">{loginEmail}</p>
-                                </div>
+<div className="text-center mb-4">
+    <span className={`px-6 py-2 rounded-full text-sm font-black text-white shadow-sm ${loginEmail === ADMIN_EMAIL ? 'bg-soosi-green' : 'bg-soosi-wood'}`}>
+        {loginEmail === ADMIN_EMAIL ? '管理員模式' : '員工模式'}
+    </span>
+</div>
                                 <input type="password" placeholder="請輸入密碼" value={password} onChange={e=>setPassword(e.target.value)} className="w-full text-center py-4 rounded-2xl border-2 border-soosi-green/20 focus:border-soosi-green outline-none font-black text-lg tracking-widest" autoFocus />
                                 {error && <p className="text-soosi-red text-xs font-black">{error}</p>}
                                 <button disabled={loading} className="w-full bg-soosi-dark text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2">
@@ -584,8 +583,9 @@
                 </div>
             );
         };
-// --- 修改密碼 Modal ---
+// --- 修改密碼 Modal (管理員專用加強版) ---
         const ChangePasswordModal = ({ isOpen, onClose }) => {
+            const [targetEmail, setTargetEmail] = useState(ADMIN_EMAIL); // 預設修改管理員自己
             const [oldPwd, setOldPwd] = useState("");
             const [newPwd, setNewPwd] = useState("");
             const [confirmPwd, setConfirmPwd] = useState("");
@@ -599,20 +599,27 @@
                 
                 setLoading(true);
                 try {
-                    // 1. 驗證舊密碼 (透過嘗試登入來驗證)
-                    const { data: { user } } = await supabase.auth.getUser();
+                    // 1. 執行環境檢查與登入驗證
+                    // 為了修改密碼，必須以「該目標帳號」的身份進行驗證
                     const { error: verifyError } = await supabase.auth.signInWithPassword({
-                        email: user.email,
+                        email: targetEmail,
                         password: oldPwd
                     });
                     
-                    if (verifyError) throw new Error("舊密碼錯誤，請重新輸入");
+                    if (verifyError) throw new Error(`${targetEmail === ADMIN_EMAIL ? '您的舊密碼' : '員工的舊密碼'}輸入錯誤`);
 
-                    // 2. 更新密碼
+                    // 2. 更新該帳號的密碼
                     const { error: updateError } = await supabase.auth.updateUser({ password: newPwd });
                     if (updateError) throw updateError;
 
-                    alert("✅ 密碼修改成功！下次登入請使用新密碼。");
+                    alert(`✅ [${targetEmail === ADMIN_EMAIL ? '管理員' : '員工'}] 密碼修改成功！`);
+                    
+                    // 3. 如果剛才是改員工密碼，系統現在是員工身份，需自動切換回管理員
+                    if (targetEmail === STAFF_EMAIL) {
+                        alert("正在切換回管理員權限...");
+                        window.location.reload(); 
+                    }
+
                     onClose();
                     setOldPwd(""); setNewPwd(""); setConfirmPwd("");
                 } catch (err) {
@@ -624,21 +631,43 @@
 
             return (
                 <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl animate-in zoom-in-95">
-                        <h3 className="font-black text-lg text-center mb-1 text-soosi-dark">修改登入密碼</h3>
-                        <p className="text-[10px] text-gray-400 text-center mb-4">請輸入舊密碼以確保安全</p>
-                        <div className="space-y-3">
-                            <input type="password" placeholder="舊密碼" value={oldPwd} onChange={e=>setOldPwd(e.target.value)} className="admin-input text-center text-lg tracking-widest" />
-                            <div className="border-t border-gray-100 my-2"></div>
-                            <input type="password" placeholder="新密碼" value={newPwd} onChange={e=>setNewPwd(e.target.value)} className="admin-input text-center text-lg tracking-widest" />
-                            <input type="password" placeholder="確認新密碼" value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} className="admin-input text-center text-lg tracking-widest" />
+                    <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95">
+                        <h3 className="font-black text-xl text-center mb-1 text-soosi-dark flex items-center justify-center gap-2">
+                            <Icon name="shield-check" className="text-soosi-green"/> 密碼修改
+                        </h3>
+                        <p className="text-[10px] text-gray-400 text-center mb-6 font-bold">管理員可在此更新系統登入認證</p>
+                        
+                        {/* 修改對象選擇 */}
+                        <div className="flex bg-gray-100 p-1.5 rounded-2xl mb-6">
+                            <button onClick={() => setTargetEmail(ADMIN_EMAIL)} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${targetEmail === ADMIN_EMAIL ? 'bg-white text-soosi-green shadow-sm' : 'text-gray-400'}`}>管理員(自己)</button>
+                            <button onClick={() => setTargetEmail(STAFF_EMAIL)} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${targetEmail === STAFF_EMAIL ? 'bg-white text-soosi-wood shadow-sm' : 'text-gray-400'}`}>一般員工</button>
                         </div>
-                        <div className="flex gap-2 mt-6">
-                            <button onClick={onClose} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold text-gray-500">取消</button>
-                            <button onClick={handleUpdate} disabled={loading} className="flex-1 py-2 bg-soosi-green text-white rounded-lg text-xs font-bold shadow-md">
-                                {loading ? "更新中..." : "確認修改"}
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 ml-2 mb-1 block">請輸入該帳號目前的【舊密碼】</label>
+                                <input type="password" placeholder="舊密碼" value={oldPwd} onChange={e=>setOldPwd(e.target.value)} className="admin-input text-center text-lg tracking-widest py-3" />
+                            </div>
+                            <div className="border-t border-dashed border-gray-100 my-2"></div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 ml-2 mb-1 block">設定【新密碼】</label>
+                                <input type="password" placeholder="新密碼" value={newPwd} onChange={e=>setNewPwd(e.target.value)} className="admin-input text-center text-lg tracking-widest py-3 mb-2" />
+                                <input type="password" placeholder="確認新密碼" value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} className="admin-input text-center text-lg tracking-widest py-3" />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-8">
+                            <button onClick={onClose} className="flex-1 py-3 bg-gray-50 rounded-2xl text-xs font-black text-gray-400 hover:bg-gray-100 transition-colors">取消</button>
+                            <button onClick={handleUpdate} disabled={loading} className="flex-[1.5] py-3 bg-soosi-dark text-white rounded-2xl text-xs font-black shadow-lg active:scale-95 transition-all">
+                                {loading ? "處理中..." : "確認修改"}
                             </button>
                         </div>
+                        
+                        {targetEmail === STAFF_EMAIL && (
+                            <p className="mt-4 text-[9px] text-soosi-red font-bold text-center leading-relaxed">
+                                ※ 修改員工密碼需知道員工的「現有密碼」。<br/>完成後系統將自動重新整理以確保權限正確。
+                            </p>
+                        )}
                     </div>
                 </div>
             );
@@ -738,15 +767,17 @@
                             <img src="nav.png" className="w-10 h-10 object-contain" />
                             <span className="font-black text-soosi-dark text-xl tracking-tight">Soosi Admin</span>
                         </div>
-{/* 右側按鈕群組 */}
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setShowPwdModal(true)} className="w-10 h-10 bg-white border-2 border-gray-100 rounded-full flex items-center justify-center text-soosi-wood hover:border-soosi-wood hover:bg-soosi-wood hover:text-white transition-all shadow-sm" title="修改密碼">
-                                <Icon name="key" size={16}/>
-                            </button>
-                            <button onClick={() => supabase.auth.signOut()} className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-soosi-red transition-all" title="登出">
-                                <Icon name="log-out" size={18}/>
-                            </button>
-                        </div>
+<div className="flex items-center gap-2">
+    {/* 🌟 只有管理員才看得到修改密碼按鈕 */}
+    {user?.email === ADMIN_EMAIL && (
+        <button onClick={() => setShowPwdModal(true)} className="w-10 h-10 bg-white border-2 border-gray-100 rounded-full flex items-center justify-center text-soosi-wood hover:border-soosi-wood hover:bg-soosi-wood hover:text-white transition-all shadow-sm" title="管理員權限：修改密碼">
+            <Icon name="key" size={16}/>
+        </button>
+    )}
+    <button onClick={() => supabase.auth.signOut()} className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-soosi-red transition-all" title="登出">
+        <Icon name="log-out" size={18}/>
+    </button>
+</div>
                     </nav>
 
                     <main className="max-w-4xl mx-auto p-6 space-y-6">

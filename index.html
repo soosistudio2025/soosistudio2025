@@ -614,6 +614,109 @@ const PriceListPage = ({ onBack }) => {
                     {error && <div className="field-error"><Icon name="alert-circle" size={12}/>{error}</div>}
                 </div>
             );
+// --- 修改後的集點進度卡 (包含套用按鈕) ---
+const LoyaltyProgressCard = ({ info, formData, setFormData, isCustomerMode }) => {
+    if (!info || info.count === undefined) return null;
+    if (info.count === 0 && !info.message) return null;
+
+    const current = info.count; 
+    const isCompleted = info.eligible;
+    const deadline = info.deadline;
+
+    return (
+        <div className={`cute-card p-5 border-2 bg-white relative overflow-hidden animate-in slide-in-from-top-4 duration-500 ${isCompleted ? 'border-soosi-red/30' : 'border-soosi-wood/20'}`}>
+            {/* 背景裝飾 */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-soosi-accent/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+            
+            <div className="flex justify-between items-start mb-4 relative z-10">
+                <div className="flex items-center gap-2">
+                    <div className="bg-soosi-wood text-white p-1.5 rounded-lg shadow-sm">
+                        <Icon name="crown" size={18} />
+                    </div>
+                    <div>
+                        <div className="text-[10px] font-bold text-gray-400 tracking-wider">50天回訪優惠</div>
+                        <div className="text-sm font-black text-soosi-dark">
+                            {isCompleted ? "🎉 恭喜達成優惠！" : `目前累積：第 ${current} 次`}
+                        </div>
+                    </div>
+                </div>
+                
+                {/* ★ 按鈕區域：符合資格時顯示「套用按鈕」 ★ */}
+                {isCompleted ? (
+                    <button 
+                        type="button"
+                        disabled={isCustomerMode}
+                        onClick={() => setFormData(p => ({ ...p, usePromo50: !p.usePromo50 }))}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm active:scale-95 ${
+                            formData.usePromo50 
+                            ? 'bg-soosi-red text-white ring-2 ring-offset-1 ring-soosi-red' 
+                            : 'bg-white text-soosi-red border border-soosi-red hover:bg-red-50'
+                        }`}
+                    >
+                        <Icon name={formData.usePromo50 ? "check-circle" : "gift"} size={12}/>
+                        {formData.usePromo50 ? "已套用折扣" : "立即折抵"}
+                    </button>
+                ) : (
+                    /* 未符合資格時顯示期限或加油文字 */
+                    deadline ? (
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-bold text-gray-400">本輪截止</span>
+                            <div className="flex items-center gap-1 bg-red-50 text-soosi-red px-2 py-1 rounded-md border border-red-100">
+                                <Icon name="clock" size={10} />
+                                <span className="text-[10px] font-black">{deadline}</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="px-2 py-1 rounded-md text-[10px] font-black bg-gray-100 text-gray-500">
+                            加油！快達成了
+                        </div>
+                    )
+                )}
+            </div>
+
+            {/* 進度條區域 */}
+            <div className="relative px-2 py-2 mb-2">
+                <div className="absolute top-1/2 left-0 w-full h-1.5 bg-gray-100 -translate-y-1/2 rounded-full z-0"></div>
+                <div className="absolute top-1/2 left-0 h-1.5 bg-gradient-to-r from-soosi-wood to-soosi-accent -translate-y-1/2 rounded-full z-0 transition-all duration-1000 ease-out" 
+                     style={{ width: `${Math.min((current / 4) * 100, 100)}%` }}></div>
+
+                <div className="relative z-10 flex justify-between">
+                    {[1, 2, 3, 4].map((step) => {
+                        const active = current >= step;
+                        return (
+                            <div key={step} className="flex flex-col items-center gap-1 group">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black border-2 transition-all duration-500 ${
+                                    active 
+                                    ? 'bg-soosi-wood border-soosi-wood text-white shadow-md scale-110' 
+                                    : 'bg-white border-gray-200 text-gray-300'
+                                }`}>
+                                    {active ? <Icon name="check" size={12}/> : step}
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div className="flex flex-col items-center gap-1">
+                        <div className={`w-9 h-9 -mt-1 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
+                            isCompleted 
+                            ? 'bg-soosi-red border-soosi-red text-white shadow-lg animate-bounce' 
+                            : 'bg-white border-gray-200 text-gray-300'
+                        }`}>
+                            <Icon name="gift" size={18} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* 提示文字 */}
+            <div className="text-[10px] font-bold text-gray-400 text-center">
+                 {isCompleted 
+                    ? (formData.usePromo50 ? "折扣已生效，本次消費將折抵 $200" : "點擊上方按鈕即可使用優惠") 
+                    : `還差 ${Math.max(0, 4 - current)} 次即可獲得第 5 次優惠`}
+            </div>
+        </div>
+    );
+};
+        // --- 歷史紀錄選擇彈窗組件 ---
 const HistoryModal = ({ records, onClose, onSelect }) => (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-soosi-dark/40 backdrop-blur-sm animate-in fade-in">
         <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
@@ -1041,8 +1144,11 @@ estimated_price: '',
     pet_type: 'dog', 
 isDaycare: false,
     bookingTimeEnd: '', // 新增：安親結束時間
-usePromo50: false, // 50天優惠方案狀態
+    usePromo50: false, // 50天優惠方案狀態
 });
+
+// ★ 新增：集點卡資訊狀態
+const [loyaltyInfo, setLoyaltyInfo] = useState(null);
 
 // --- 更新：自動偵測優惠資格 (Debug 偵錯版) ---
     useEffect(() => {
@@ -1089,23 +1195,30 @@ usePromo50: false, // 50天優惠方案狀態
                     throw error;
                 }
 
-                console.log("✅ [3] Supabase 回傳結果:", data);
+console.log("✅ [3] Supabase 回傳結果:", data);
 
-                if (data && data.eligible) {
-                    console.log("🎉 [Result] 符合資格！準備跳出通知...");
-if (!formData.usePromo50) { 
-                        setFormData(prev => ({ ...prev, usePromo50: true }));
-                        
-                        // 設定彈窗訊息並顯示
-                        setDiscountMessage(data.message);
-                        setShowDiscountModal(true); 
+                // ★ 修改：將後端回傳的集點資訊存入 State，供介面顯示
+if (data) {
+                    setLoyaltyInfo({
+                        count: data.count || 0,
+                        eligible: data.eligible,
+                        deadline: data.deadline, 
+                        message: data.message
+                    });
+
+                    // 原本的優惠彈窗與勾選邏輯
+                    if (data.eligible) {
+                        console.log("🎉 [Result] 符合資格！");
+                        if (!formData.usePromo50) { 
+                            setFormData(prev => ({ ...prev, usePromo50: true }));
+                            setDiscountMessage(data.message);
+                            setShowDiscountModal(true); 
+                        }
                     } else {
-                        console.log("ℹ️ [Info] UI 已經是優惠狀態，不重複 Alert");
-                    }
-                } else {
-                    console.log("❄️ [Result] 不符合資格");
-                    if (formData.usePromo50) {
-                        setFormData(prev => ({ ...prev, usePromo50: false }));
+                        console.log("❄️ [Result] 不符合資格");
+                        if (formData.usePromo50) {
+                            setFormData(prev => ({ ...prev, usePromo50: false }));
+                        }
                     }
                 }
 
@@ -1592,6 +1705,7 @@ const handleSubmit = async () => {
 </div>
                         </section>
 
+
                         {/* 新增：寵物詳細資料 (移到預約時間上方) */}
                         <section className="cute-card p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
                             <div className="flex items-center gap-3 border-b-2 border-dashed border-soosi-wood/10 pb-4">
@@ -2048,6 +2162,17 @@ const handleSubmit = async () => {
                                             </div>
                                         )}
                                     </div>
+{/* ★ 集點卡 (傳入控制參數) ★ */}
+                                    {loyaltyInfo && (
+                                        <div className="mb-6">
+                                            <LoyaltyProgressCard 
+                                                info={loyaltyInfo} 
+                                                formData={formData}        // 傳入表單資料
+                                                setFormData={setFormData}  // 傳入設定函數
+                                                isCustomerMode={isCustomerMode} // 傳入是否為客人模式(鎖定)
+                                            />
+                                        </div>
+                                    )}
 
 {/* 預估金額區塊 (美容專用) */}
 {/* 修改後的金額輸入區塊：帳單明細風格 */}
@@ -2057,22 +2182,7 @@ const handleSubmit = async () => {
             <Icon name="wallet" size={20}/> 費用明細
         </h3>
         
-        {/* 優惠開關 (改為更像開關的樣式) */}
-        <button 
-            type="button"
-            disabled={isCustomerMode}
-            onClick={() => setFormData(p => ({ ...p, usePromo50: !p.usePromo50 }))}
-            className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all flex items-center gap-1 border ${
-                formData.usePromo50 
-                ? 'bg-soosi-red text-white border-soosi-red shadow-md' 
-                : 'bg-white text-gray-400 border-gray-200 hover:border-soosi-wood'
-            }`}
-        >
-            <Icon name={formData.usePromo50 ? "check" : "tag"} size={14}/>
-            {formData.usePromo50 ? "優惠已啟用" : "啟用優惠"}
-        </button>
-    </div>
-    
+    </div>    
     <div className="bg-white p-5 rounded-xl border border-soosi-wood/10 shadow-sm space-y-4">
         {/* 1. 原價輸入行 */}
         <div className="flex items-center justify-between">
@@ -2115,12 +2225,23 @@ const handleSubmit = async () => {
         </div>
     </div>
 
-    {/* 警語區塊 (縮小並美化) */}
-    <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex items-start gap-2 text-[11px] text-soosi-red leading-relaxed">
-        <Icon name="info" size={14} className="mt-0.5 shrink-0"/>
-        <div>
-            <span className="font-bold">費用備註：</span>
-            若有嚴重打結、跳蚤或攻擊行為，將現場另加收處理費。若發現寄生蟲/傳染病，將額外收取環境清潔費 $1000。
+{/* 警語區塊 (視覺優化版：拆分一般備註與嚴重警示) */}
+    <div className="space-y-2 pt-1">
+        {/* 1. 浮動報價 (溫和提醒) */}
+        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-[11px] text-gray-500 leading-relaxed flex items-start gap-2">
+            <Icon name="info" size={14} className="mt-0.5 shrink-0 text-gray-400"/>
+            <div>
+                <span className="font-bold text-gray-600">費用說明：</span>
+                實際金額依現場測量「體重、毛量、廢毛」為準。若有嚴重打結或攻擊行為，將另加收處理費。
+            </div>
+        </div>
+        {/* 2. 嚴重規範 (紅色警示) */}
+        <div className="bg-red-50 p-3 rounded-xl border border-red-100 text-[11px] text-soosi-red leading-relaxed flex items-start gap-2">
+            <Icon name="alert-triangle" size={14} className="mt-0.5 shrink-0"/>
+            <div>
+                <span className="font-bold">重要規範：</span>
+                本店不接有寄生蟲、傳染疾病之毛孩。若過程中發現，將額外收取 <span className="font-black underline">環境清潔費 $1000</span>。
+            </div>
         </div>
     </div>
 </div>
@@ -2374,6 +2495,17 @@ return allServices.map((item) => (
                                 </div>
                             </div>
                             )}
+{/* ★ 集點卡 (傳入控制參數) ★ */}
+                                    {loyaltyInfo && (
+                                        <div className="mb-6">
+                                            <LoyaltyProgressCard 
+                                                info={loyaltyInfo} 
+                                                formData={formData}        // 傳入表單資料
+                                                setFormData={setFormData}  // 傳入設定函數
+                                                isCustomerMode={isCustomerMode} // 傳入是否為客人模式(鎖定)
+                                            />
+                                        </div>
+                                    )}
 
 {/* 新增：本次服務金額 (獨立區塊，永遠顯示) */}
                             <div className="cute-card p-6 space-y-4 border-2 border-soosi-wood/20">
@@ -2381,22 +2513,6 @@ return allServices.map((item) => (
                                     <h3 className="font-black text-lg text-soosi-wood flex items-center gap-2">
                                         <Icon name="wallet" size={20}/> 本次{formData.isDaycare ? '安親' : '住宿'}金額
                                     </h3>
-                                    {/* 住宿若有加購美容，也可套用優惠 */}
-                                    {formData.addGrooming && (
-                                        <button 
-                                            type="button"
-                                            disabled={isCustomerMode}
-                                            onClick={() => setFormData(p => ({ ...p, usePromo50: !p.usePromo50 }))}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${
-                                                formData.usePromo50 
-                                                ? 'bg-soosi-red text-white shadow-md shadow-soosi-red/20 ring-2 ring-offset-1 ring-soosi-red' 
-                                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                            }`}
-                                        >
-                                            <Icon name={formData.usePromo50 ? "check-circle" : "tag"} size={14}/>
-                                            {formData.usePromo50 ? "已套用 50天優惠" : "套用 50天優惠"}
-                                        </button>
-                                    )}
                                 </div>
                                 
 <div className="bg-white p-5 rounded-xl border border-soosi-wood/10 shadow-sm space-y-4">
@@ -3153,7 +3269,7 @@ onClick={handleRequestLink}
                             <div className="space-y-3">
                                 <h5 className="font-black text-lg text-soosi-wood border-b-2 border-soosi-wood/10 pb-2">三、住宿與照護安排</h5>
                                 <ul className="list-decimal pl-5 space-y-2">
-                                    <li><span className="font-bold">放風：</span>每日2次。若不希望參與、或寵物有健康疑慮，請主動告知。（未施打疫苗、高齡、未結紮者不安排共同放風）。</li>
+                                    <li><span className="font-bold">放風：</span>每日2次。若不希望參與、或寵物有健康疑慮，請主動告知。</li>
                                     <li><span className="font-bold">飲食：</span>特殊飲食照護每日加收 <span className="font-bold">$100-$500</span>。若自備食物不足，代購費用另計。</li>
                                     <li><span className="font-bold">物品：</span>請自備熟悉物品。抬腳尿尿狗狗將穿戴禮貌帶。</li>
                                     <li><span className="font-bold">損壞賠償：</span>若寵物破壞設施，飼主須照價賠償。</li>

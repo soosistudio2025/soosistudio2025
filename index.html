@@ -616,16 +616,15 @@ const PriceListPage = ({ onBack }) => {
                 </button>
             );
 
-            const InputGroup = ({ label, error, id, children, required = false }) => (
-                <div className="space-y-1.5" id={id}>
-                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">
-                        {required && <span className="text-soosi-red text-xs">●</span>}
-                        {label}
-                    </label>
-                    {children}
-                    {error && <div className="field-error"><Icon name="alert-circle" size={12}/>{error}</div>}
-                </div>
-            );
+const InputGroup = ({ label, error, id, children, required = false }) => (
+    <div className="space-y-1.5" id={id}>
+        <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">
+            {label} {required && <span className="text-red-500">*</span>}
+        </label>
+        {children}
+        {error && <div className="field-error"><Icon name="alert-circle" size={12}/>{error}</div>}
+    </div>
+);
 // --- 修改後的集點進度卡 (包含套用按鈕) ---
 const LoyaltyProgressCard = ({ info, formData, setFormData, isCustomerMode }) => {
     if (!info || info.count === undefined) return null;
@@ -1289,6 +1288,7 @@ estimated_price: '',
 isDaycare: false,
     bookingTimeEnd: '', // 新增：安親結束時間
     usePromo50: false, // 50天優惠方案狀態
+image_auth: '', // 🌟 新增：影像授權狀態 (預設空字串)
 });
 
 // ★ 新增：集點卡資訊狀態
@@ -1670,26 +1670,60 @@ const handleSubmit = async () => {
     
     await new Promise(r => setTimeout(r, 50)); // 等待狀態更新
 
-    const newErrors = {};
-    const required = ['email', 'owner_name', 'phone', 'address', 'emergency_name', 'emergency_phone', 'pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'chip_status', 'medical_status', 'social_aggression', 'social_play'];
+const newErrors = {};
     
+    // --- 1. 基礎必填項目 ---
+    const required = [
+        'email', 'owner_name', 'phone', 'owner_id', 'address', 
+        'emergency_name', 'emergency_phone', 'pet_name', 'breed', 
+        'weight', 'sex', 'fix', 'grooming_temperament', 'chip_status', 
+        'medical_status', 'social_aggression', 'image_auth', 'personality'
+    ]; 
+    if (formData.pet_type === 'dog') required.push('social_play');
     required.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
-    if(formData.chip_status === '有晶片' && !formData.chip_id) newErrors.chip_status = '請輸入晶片號碼';
-    if(formData.deworm === '有' && !formData.deworm_brand) newErrors.deworm_brand = '請輸入驅蟲藥牌子';
-    if(!isBoarding && (!formData.service_items || formData.service_items.length === 0)) newErrors.service_items = '請選擇至少一項服務內容';
-    if(isBoarding && formData.pet_type === 'dog' && !formData.hasTrialStay) newErrors.hasTrialStay = '請先執行安親試住後再預約住宿';
-    
-    if(!lineConfirmed) newErrors.line = '請確認已加入 LINE';
-    if(!allTermsRead) newErrors.signature = '請先完成上方所有契約條款閱讀';
-    if(!realtimeSig) newErrors.signature = '請完成簽名';
-    
-    if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        const firstError = Object.keys(newErrors)[0];
-        const el = document.getElementById(firstError);
-        if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        else alert("請檢查必填欄位");
-        return;
+
+    // --- 2. 年齡/月齡檢查 ---
+    if (formData.is_under_one ? !formData.age_months : !formData.age) {
+        newErrors[formData.is_under_one ? 'age_months' : 'age'] = '請填寫年齡';
+    }
+
+    // --- 3. 醫療病史細項檢查 (勾選「有」則必填項目或說明) ---
+    if (formData.medical_status === '有') {
+        const hasHistoryItems = formData.medical_history && formData.medical_history.length > 0;
+        const hasHistoryOther = formData.medical_history_other && formData.medical_history_other.trim() !== '';
+        if (!hasHistoryItems && !hasHistoryOther) {
+            newErrors.medical_status = '請至少選擇一項病史或在下方填寫說明';
+        }
+    }
+
+    // --- 4. 住宿專用檢查 ---
+    if (isBoarding) {
+        // 住宿金額各項
+        if (!formData.checkInDate) newErrors.checkInDate = '請選擇日期';
+        if (!formData.isDaycare && !formData.checkOutDate) newErrors.checkOutDate = '請選擇日期';
+
+        // 狗狗不加購美容的證明檢查
+        if (formData.pet_type === 'dog' && formData.addGrooming === false) {
+            if (!formData.proof_type) {
+                newErrors.addGrooming = '請選擇證明提供方式';
+            } else if (formData.proof_type === 'upload' && !formData.proof_url) {
+                newErrors.addGrooming = '請確實上傳洗澡收據照片';
+            }
+        }
+
+        // 飲食與生活習慣 (與先前邏輯一致...)
+        if (!formData.pica) newErrors.pica = '請選擇異食狀況';
+        if (!formData.diet_type || formData.diet_type.length === 0) newErrors.diet_type = '請勾選飲食習慣';
+        if (!formData.feeding_plan) newErrors.feeding_plan = '請填寫餵食說明';
+
+        if (formData.pet_type === 'dog') {
+            ['isBarking', 'isFoodGuarding', 'useToiletPad'].forEach(f => { if(!formData[f]) newErrors[f] = '必填'; });
+            if (!formData.crateTraining || formData.crateTraining.length === 0) newErrors.crateTraining = '請勾選狀況';
+        } else {
+            if (!formData.litter_type) newErrors.litter_type = '請選擇貓砂習慣';
+        }
+    } else {
+        if (!formData.service_items || formData.service_items.length === 0) newErrors.service_items = '請選擇服務內容';
     }
 
 setIsSubmitting(true);
@@ -2028,7 +2062,7 @@ const calculatedTotalPrice = useMemo(() => {
     </button>
 </div>
                                 </InputGroup>
-                                <InputGroup label="身分證字號 " required error={errors.id}  id="owner_id">
+<InputGroup label="身分證字號" required error={errors.owner_id} id="owner_id">
                                     <input type="text" value={formData.owner_id} onChange={e=>handleChange('owner_id', e.target.value)} className="w-full cute-input px-4 py-3" placeholder="例如: A123456789" />
                                 </InputGroup>
                                 <div className="md:col-span-2">
@@ -2080,7 +2114,7 @@ const calculatedTotalPrice = useMemo(() => {
                             {/* 新增：狗/貓選擇 */}
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">
-                                    <span className="text-soosi-red text-xs">●</span> 種類
+                                種類<span className="text-red-500">*</span>
                                 </label>
                                 <div className="flex gap-3">
                                     <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${formData.pet_type === 'dog' ? 'bg-soosi-wood text-white border-soosi-wood shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
@@ -2090,7 +2124,6 @@ const calculatedTotalPrice = useMemo(() => {
     value="dog" 
     checked={formData.pet_type === 'dog'} 
     onChange={(e) => {
-        // 切換種類時，清空已選的服務項目，避免「狗的服務」殘留在「貓」的資料裡
         setFormData(prev => ({ ...prev, pet_type: 'dog', service_items: [], service_items_other: '' }));
     }} 
     className="hidden" 
@@ -2126,7 +2159,7 @@ const calculatedTotalPrice = useMemo(() => {
                                 
                                 {/* 修改年齡邏輯：切換時清空另一邊的數值 */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 年齡</label>
+                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">年齡<span className="text-red-500">*</span></label>
                                     <div className="flex gap-2">
                                         <PillBtn active={!formData.is_under_one} onClick={()=>setFormData(p=>({...p, is_under_one:false, age_months:''}))}>一歲以上</PillBtn>
                                         <PillBtn active={formData.is_under_one} onClick={()=>setFormData(p=>({...p, is_under_one:true, age:''}))}>一歲以下</PillBtn>
@@ -2142,7 +2175,7 @@ const calculatedTotalPrice = useMemo(() => {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 性別</label>
+                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">性別<span className="text-red-500">*</span></label>
                                     <div className="flex gap-2">
                                         <PillBtn active={formData.sex === '公'} onClick={()=>handleChange('sex', '公')}>公</PillBtn>
                                         <PillBtn active={formData.sex === '母'} onClick={()=>handleChange('sex', '母')}>母</PillBtn>
@@ -2151,7 +2184,7 @@ const calculatedTotalPrice = useMemo(() => {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 結紮</label>
+                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1">結紮<span className="text-red-500">*</span></label>
                                     <div className="flex gap-2">
                                         <PillBtn active={formData.fix === '是'} onClick={()=>handleChange('fix', '是')}>是</PillBtn>
                                         <PillBtn active={formData.fix === '否'} onClick={()=>handleChange('fix', '否')}>否</PillBtn>
@@ -2161,7 +2194,7 @@ const calculatedTotalPrice = useMemo(() => {
 
                                 {/* 社交狀況：改為二選一的兩組題目 */}
                                 <div className="md:col-span-2 space-y-4" id="social_aggression">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 攻擊性</label>
+                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"> 攻擊性<span className="text-red-500">*</span></label>
                                     <div className="flex gap-3">
                                         <PillBtn active={formData.social_aggression === '有攻擊性'} onClick={()=>handleChange('social_aggression', '有攻擊性')}>有攻擊性</PillBtn>
                                         <PillBtn active={formData.social_aggression === '無攻擊性'} onClick={()=>handleChange('social_aggression', '無攻擊性')}>無攻擊性</PillBtn>
@@ -2171,7 +2204,7 @@ const calculatedTotalPrice = useMemo(() => {
 
 {formData.pet_type === 'dog' && (
                                     <div className="md:col-span-2 space-y-4" id="social_play">
-                                        <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 與狗相處</label>
+                                        <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"> 與狗相處<span className="text-red-500">*</span></label>
                                         <div className="flex gap-3">
                                             <PillBtn active={formData.social_play === '可與狗玩'} onClick={()=>handleChange('social_play', '可與狗玩')}>可與狗朋友玩</PillBtn>
                                             <PillBtn active={formData.social_play === '不可與狗玩'} onClick={()=>handleChange('social_play', '不可與狗玩')}>不能與狗朋友玩</PillBtn>
@@ -2183,7 +2216,7 @@ const calculatedTotalPrice = useMemo(() => {
                                 {/* 美容性情評估 */}
 
                                 <div className="md:col-span-2 space-y-2" id="grooming_temperament">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 美容性情與攻擊性評估</label>
+                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"> 美容性情與攻擊性評估<span className="text-red-500">*</span></label>
                                     <div className="space-y-2">
                                         {[
                                             {v: '天使寶寶', l: '😇 天使寶寶：個性溫和，無任何攻擊紀錄，也不怕生。'},
@@ -2200,7 +2233,7 @@ const calculatedTotalPrice = useMemo(() => {
                                 </div>
 
                                 <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"><span className="text-soosi-red text-xs">●</span> 晶片狀態</label>
+                                    <label className="text-sm font-bold text-soosi-wood ml-1 flex items-center gap-1"> 晶片狀態<span className="text-red-500">*</span></label>
                                     <div className="flex gap-2 flex-wrap">
                                         {['有晶片','有晶片(號碼不詳)','無晶片'].map(s => (
                                             <PillBtn key={s} active={formData.chip_status===s} onClick={()=>handleChange('chip_status', s)}>{s}</PillBtn>
@@ -2229,7 +2262,7 @@ const calculatedTotalPrice = useMemo(() => {
                                 <div className="md:col-span-2 p-5 rounded-2xl border bg-red-50 border-red-100 transition-all" id="medical_status">
                                     <div className="flex items-center gap-2 mb-4">
                                         <label className="text-sm font-bold text-soosi-wood ml-1">
-                                            過往病史
+                                            過往病史<span className="text-red-500">*</span>
                                         </label>
                                         <div className="flex items-center gap-1 text-soosi-red text-[10px] font-black bg-white px-2 py-0.5 rounded-full shadow-sm animate-pulse border border-red-100 shrink-0">
                                             <Icon name="alert-circle" size={14}/> 請務必如實告知
@@ -2403,7 +2436,7 @@ const calculatedTotalPrice = useMemo(() => {
 
                                 <div className="mt-6 space-y-4">
                                     <div className="flex items-center gap-2">
-                                        <h3 className="text-lg font-black text-soosi-dark">本次服務內容</h3>
+                                        <h3 className="text-lg font-black text-soosi-dark">本次服務內容<span className="text-red-500">*</span></h3>
                                         <span className="text-xs text-soosi-red font-bold">請選擇至少一項</span>
                                     </div>
                                     
@@ -2638,12 +2671,12 @@ const calculatedTotalPrice = useMemo(() => {
                             {/* 區塊 2: 飲食習慣 (共通項目 - 新增) */}
                             <div className="bg-white p-6 rounded-3xl shadow-sm border border-soosi-green/10 space-y-6">
                                 <h3 className="font-black text-lg text-soosi-green flex items-center gap-2 border-b border-soosi-green/10 pb-2">
-                                    <Icon name="utensils" size={20}/> 飲食習慣調查
+                                    <Icon name="utensils" size={20}/> 飲食習慣調查<span className="text-red-500">*</span>
                                 </h3>
 
                                 <div className="space-y-4">
                                     {/* 異食癖 */}
-                                    <InputGroup label="是否有異食癖 (亂吃東西)？" required error={errors.pica} id="pica">
+<InputGroup label="是否有異食癖 (亂吃東西)？" required error={errors.pica} id="pica">
                                         <div className="flex gap-3">
                                             <PillBtn active={formData.pica === '有'} onClick={()=>handleChange('pica', '有')}>有 (請備註)</PillBtn>
                                             <PillBtn active={formData.pica === '無'} onClick={()=>handleChange('pica', '無')}>無</PillBtn>
@@ -2657,7 +2690,7 @@ const calculatedTotalPrice = useMemo(() => {
 
                                     {/* 飲食種類 (複選) */}
                                     <div className="space-y-2">
-                                        <label className="text-sm font-bold text-soosi-dark ml-1">平時飲食習慣 (可複選) <span className="text-red-500">*</span></label>
+<label className="text-sm font-bold text-soosi-dark ml-1">平時飲食習慣 (可複選) <span className="text-red-500">*</span></label>
                                         <div className="flex flex-wrap gap-2">
                                             {['乾糧', '罐頭', '鮮食', '生肉', '其他'].map(opt => (
                                                 <button key={opt} type="button" onClick={() => toggleArray('diet_type', opt)}
@@ -2892,7 +2925,7 @@ const calculatedTotalPrice = useMemo(() => {
                                     {/* 統一改為 Yes/No 選擇 */}
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-soosi-dark ml-1">
-                                            {formData.pet_type === 'dog' ? '是否要在本館安排洗澡？' : '是否需要在住宿期間安排美容？'}
+                                            {formData.pet_type === 'dog' ? '是否要在本館安排洗澡？' : '是否需要在住宿期間安排美容？'}<span className="text-red-500">*</span>
                                         </label>
                                         <div className="flex gap-3 mb-4">
                                             <PillBtn active={formData.addGrooming === true} onClick={()=>handleChange('addGrooming', true)}>是，我要加購</PillBtn>
@@ -2914,7 +2947,7 @@ const calculatedTotalPrice = useMemo(() => {
 
                                             {/* 選擇提供方式 */}
                                             <div className="space-y-2">
-                                                <label className="text-xs font-bold text-orange-800 ml-1">請選擇證明方式：</label>
+<label className="text-xs font-bold text-orange-800 ml-1">請選擇證明方式 <span className="text-red-500">*</span>：</label>
                                                 <div className="flex gap-3">
                                                     <button type="button" 
                                                         onClick={() => setFormData(p => ({ ...p, proof_type: 'onsite', proof_url: '' }))}
@@ -3346,7 +3379,29 @@ return allServices.map((item) => (
                                     <div className="col-span-2"><span className="opacity-60 block">營業地址</span><span className="font-bold">台中市清水區新興路142-1號</span></div>
                                 </div>
                             </div>
-
+{/* 🌟 新增：影像使用授權 */}
+<div className="cute-card p-5 border-2 border-soosi-wood/20 bg-white">
+    <label className="text-sm font-bold text-soosi-dark flex items-start gap-2 mb-3">
+        <Icon name="camera" size={18} className="text-soosi-wood mt-0.5"/>
+        <div>
+影像使用授權 <span className="text-red-500">*</span>
+            <p className="text-[10px] text-gray-400 font-normal mt-1">
+                是否同意將毛孩照片/影片上傳至社群網站(FB/IG)並標記名字？
+            </p>
+        </div>
+    </label>
+    <div className="flex gap-3">
+        <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${formData.image_auth === 'agree' ? 'bg-soosi-green text-white border-soosi-green shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+            <input type="radio" name="image_auth" value="agree" checked={formData.image_auth === 'agree'} onChange={() => handleChange('image_auth', 'agree')} className="hidden" />
+            <Icon name="check" size={16}/> <span className="font-bold">同意</span>
+        </label>
+        <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${formData.image_auth === 'disagree' ? 'bg-gray-500 text-white border-gray-500 shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+            <input type="radio" name="image_auth" value="disagree" checked={formData.image_auth === 'disagree'} onChange={() => handleChange('image_auth', 'disagree')} className="hidden" />
+            <Icon name="x" size={16}/> <span className="font-bold">不同意</span>
+        </label>
+    </div>
+    {errors.image_auth && <div className="field-error mt-2"><Icon name="alert-circle" size={12}/>{errors.image_auth}</div>}
+</div>
                             {/* 條款按鈕區塊 */}
 <div className="space-y-4">
 {/* 1. 美容條款 (修改：住宿且沒加購美容時隱藏) */}
@@ -3419,7 +3474,6 @@ return allServices.map((item) => (
 {/* Signature - 依賴條款閱讀狀態 (allTermsRead) */}
                         <div className="space-y-3" id="signature">
                             <div className="flex justify-between items-center">
-                                {/* 修改處：移除了 <span className="text-soosi-red text-xs">●</span> */}
                                 <label className="text-sm font-bold text-soosi-wood flex items-center gap-2"><Icon name="pen-tool" size={16}/> 數位簽名</label>
                                 {realtimeSig && <button onClick={()=>setRealtimeSig(null)} className="text-xs text-red-400 font-bold flex items-center gap-1 bg-red-50 px-2 py-1 rounded-full"><Icon name="trash-2" size={12}/> 重簽</button>}
                             </div>
@@ -3867,7 +3921,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
             window.addEventListener('load', async () => {
                 try {
 // 1. 註冊 Service Worker (更新至 v=)
-                    const registration = await navigator.serviceWorker.register('./sw.js?v=9');
+                    const registration = await navigator.serviceWorker.register('./sw.js?v=10');
                     console.log('Service Worker 註冊成功');
 
                     // 2. 監聽更新：當偵測到 sw.js 內容有變動時

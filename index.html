@@ -973,7 +973,7 @@ const allRecords = data.map(r => {
                 source: source
             };
 
-            const petName = finalRecord.pet_name;
+const petName = finalRecord.pet_name?.trim();
             if (!petName) return;
 
             // 初始化該寵物的欄位
@@ -1701,7 +1701,15 @@ const newErrors = {};
         // 住宿金額各項
         if (!formData.checkInDate) newErrors.checkInDate = '請選擇日期';
         if (!formData.isDaycare && !formData.checkOutDate) newErrors.checkOutDate = '請選擇日期';
-
+// 🌟 新增：狗狗住宿「未試住」強制阻擋邏輯 🌟
+        if (formData.pet_type === 'dog' && !formData.isDaycare) {
+            // 如果選了「否」(false) 或 沒選
+            if (formData.hasTrialStay !== true) {
+                alert("⛔ 無法提交！\n\n為了毛孩的安全，狗狗住宿前「必須」先完成安親試住。\n\n請先將服務類型改為「安親」進行預約，謝謝配合！");
+                setIsSubmitting(false); // 停止 loading
+                return; // 直接中斷，不送出
+            }
+        }
         // 狗狗不加購美容的證明檢查
         if (formData.pet_type === 'dog' && formData.addGrooming === false) {
             if (!formData.proof_type) {
@@ -2050,7 +2058,19 @@ const calculatedTotalPrice = useMemo(() => {
                                 </InputGroup>
                                 <InputGroup label="連絡電話" required error={errors.phone} id="phone">
 <div className="flex gap-2">
-    <input type="tel" value={formData.phone} onChange={e=>handleChange('phone', e.target.value)} className={`w-full cute-input px-4 py-3 flex-1 ${errors.phone ? 'input-error' : ''}`} placeholder="0912345678" />
+<input 
+    type="tel" 
+    inputMode="numeric" // 🌟 強制手機跳出數字鍵盤
+    pattern="[0-9]*"    // 🌟 輔助驗證
+    value={formData.phone} 
+    onChange={e => {
+        // 🌟 額外優化：只允許輸入數字，防止客人誤打文字
+        const val = e.target.value.replace(/\D/g, ''); 
+        handleChange('phone', val);
+    }}
+    className={`w-full cute-input px-4 py-3 flex-1 ${errors.phone ? 'input-error' : ''}`} 
+    placeholder="0912345678" 
+/>
     <button 
         type="button"
         onClick={handleSearchHistory}
@@ -2356,9 +2376,18 @@ const calculatedTotalPrice = useMemo(() => {
                                             <InputGroup label="入住日期" required error={errors.checkInDate} id="checkInDate">
                                                 <input disabled={isCustomerMode} type="date" name="checkInDate" value={formData.checkInDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkInDate ? 'input-error' : ''}`} />
                                             </InputGroup>
-                                            <InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
-                                                <input disabled={isCustomerMode} type="date" name="checkOutDate" value={formData.checkOutDate || ''} onChange={handleInputChange} className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} />
-                                            </InputGroup>
+<InputGroup label="退房日期" required error={errors.checkOutDate} id="checkOutDate">
+    <input 
+        disabled={isCustomerMode} 
+        type="date" 
+        name="checkOutDate" 
+        // 🌟 新增：設定最小值為入住日期 (若沒選入住日則設為今天)，防止選錯
+        min={formData.checkInDate || new Date().toISOString().split('T')[0]} 
+        value={formData.checkOutDate || ''} 
+        onChange={handleInputChange} 
+        className={`w-full cute-input px-4 py-3 ${errors.checkOutDate ? 'input-error' : ''}`} 
+    />
+</InputGroup>
                                         </div>
                                     )}
                                     {/* 自動計算晚數 Badge */}
@@ -2605,13 +2634,14 @@ const calculatedTotalPrice = useMemo(() => {
             <label className="text-sm font-bold text-gray-500">本次服務</label>
             <div className="flex items-center gap-2">
                 <span className="font-black text-soosi-wood text-lg">$</span>
-                <input 
-                    type="number" 
-                    name="estimated_price"
-                    disabled={isCustomerMode}
-                    value={formData.estimated_price || ''} 
-                    onChange={handleInputChange}
-                    placeholder="店員報價" 
+<input 
+    type="number" 
+    inputMode="numeric" 
+    name="estimated_price"
+    disabled={isCustomerMode}
+    value={formData.estimated_price || ''} 
+    onChange={handleInputChange}
+    placeholder="店員報價"
                     className={`w-28 text-right cute-input px-2 py-1.5 text-lg font-mono font-bold text-soosi-wood border-gray-200 focus:ring-1 focus:ring-soosi-wood ${isCustomerMode ? 'bg-gray-50' : ''}`}
                 />
             </div>
@@ -3921,7 +3951,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
             window.addEventListener('load', async () => {
                 try {
 // 1. 註冊 Service Worker (更新至 v=)
-                    const registration = await navigator.serviceWorker.register('./sw.js?v=10');
+                    const registration = await navigator.serviceWorker.register('./sw.js?v=11');
                     console.log('Service Worker 註冊成功');
 
                     // 2. 監聽更新：當偵測到 sw.js 內容有變動時

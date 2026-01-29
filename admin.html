@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<link rel="manifest" href="manifest-admin.json">
+    <link rel="manifest" href="manifest-admin.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="宿洗 Admin">
     <link rel="apple-touch-icon" href="nav.png">
     <link rel="icon" type="image/png" href="nav.png">
     <meta name="theme-color" content="#6A8D73">
-<title>宿洗 Soosi | 後台管理系統</title>    
+    <title>宿洗 Soosi | 後台管理系統</title>    
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -75,7 +75,6 @@
         .status-completed { background: #E5E7EB; color: #374151; }
         .status-cancelled { background: #FEE2E2; color: #DC2626; }
         
-        /* 輸入框樣式 (編輯模式用) */
         .admin-input {
             width: 100%;
             background: #fff;
@@ -101,7 +100,6 @@
 
         const ADMIN_EMAIL = "soosi.studio2025@gmail.com";
         const STAFF_EMAIL = "staff@soosi.com";
-        const ADMIN_PWD = "soosi"; // 🔒 簡易前端驗證密碼
 
         const Icon = ({ name, size = 18, className = "" }) => {
             const iconRef = useRef(null);
@@ -134,24 +132,50 @@
             return map[key] || key;
         };
 
-        // --- 權限驗證 Modal ---
-        const SecurityModal = ({ isOpen, onClose, onConfirm, title = "權限驗證" }) => {
+        // --- 權限驗證 Modal (改用 Supabase 帳密驗證) ---
+        const SecurityModal = ({ isOpen, onClose, onConfirm, title = "敏感操作驗證" }) => {
             const [pwd, setPwd] = useState("");
+            const [verifying, setVerifying] = useState(false);
+
             if (!isOpen) return null;
+
+            const handleVerify = async () => {
+                setVerifying(true);
+                try {
+                    // 🌟 核心：透過重新登入來驗證目前使用者的密碼
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const { error } = await supabase.auth.signInWithPassword({
+                        email: user.email,
+                        password: pwd,
+                    });
+
+                    if (error) throw new Error("密碼錯誤，驗證失敗");
+                    
+                    onConfirm(); // 驗證通過，執行後續動作
+                    setPwd("");
+                    onClose();
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    setVerifying(false);
+                }
+            };
+
             return (
                 <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl animate-in zoom-in-95">
-                        <h3 className="font-black text-lg text-center mb-4">{title}</h3>
-                        <input type="password" autoFocus placeholder="請輸入管理員密碼" 
+                        <h3 className="font-black text-lg text-center mb-1">{title}</h3>
+                        <p className="text-[10px] text-gray-400 text-center mb-4 font-bold">請輸入您的帳號密碼以確認變更</p>
+                        <input type="password" autoFocus placeholder="您的帳戶密碼" 
                             className="w-full border-2 border-gray-200 rounded-xl p-3 text-center mb-4 outline-none focus:border-soosi-wood"
                             value={pwd} onChange={e=>setPwd(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
                         />
                         <div className="flex gap-2">
                             <button onClick={onClose} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold text-gray-500">取消</button>
-                            <button onClick={()=>{
-                                if(pwd === ADMIN_PWD) { onConfirm(); onClose(); setPwd(""); } 
-                                else alert("密碼錯誤");
-                            }} className="flex-1 py-2 bg-soosi-wood text-white rounded-lg text-xs font-bold">確認</button>
+                            <button onClick={handleVerify} disabled={verifying} className="flex-1 py-2 bg-soosi-dark text-white rounded-lg text-xs font-bold">
+                                {verifying ? '驗證中...' : '確認'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -220,42 +244,42 @@
         };
 
         // --- 訂單詳情 Modal (含編輯與完整資訊) ---
-        const OrderModal = ({ order, onClose, onUpdateStatus, onUpdateNote, onDeleteOrder, onUpdateFullOrder }) => {
+        const OrderModal = ({ user, order, onClose, onUpdateStatus, onUpdateNote, onDeleteOrder, onUpdateFullOrder }) => {
             if (!order) return null;
             const [localNote, setLocalNote] = useState(order.admin_note || '');
             const [isEditing, setIsEditing] = useState(false);
-            const [showAuth, setShowAuth] = useState(false); // 控制編輯權限 Modal
-            const [showDeleteAuth, setShowDeleteAuth] = useState(false); // 控制刪除權限 Modal
-            const [editData, setEditData] = useState(JSON.parse(JSON.stringify(order))); // Deep copy for editing
+            const [showAuth, setShowAuth] = useState(false); 
+            const [showDeleteAuth, setShowDeleteAuth] = useState(false); 
+            const [editData, setEditData] = useState(JSON.parse(JSON.stringify(order))); 
 
             const isBoarding = order.service_type === 'boarding' || order.service_type === 'daycare';
             
-            // 處理備註更新 (失焦即儲存)
+            // 讀取 raw_data 的安全方法 (確保讀到最深層)
+            const getRaw = (key) => editData.raw_data?.raw_data?.[key] || editData.raw_data?.[key] || '';
+
+            // 處理備註更新
             const handleNoteBlur = () => {
                 if (localNote !== order.admin_note) {
                     onUpdateNote(order.id, localNote);
                 }
             };
 
-            // 處理編輯欄位變更
+            // 處理編輯變更
             const handleEditChange = (path, value) => {
                 setEditData(prev => {
                     const newData = { ...prev };
-                    // 簡單處理第一層 (owner info)
                     if (path.startsWith('owner_')) newData[path] = value;
                     else if (path === 'phone' || path === 'email' || path === 'total_price') newData[path] = value;
                     else if (path.startsWith('raw_data.')) {
-                        // 處理 raw_data 內層 (address, emergency etc)
                         const key = path.split('.')[1];
                         if (!newData.raw_data) newData.raw_data = {};
-                        if (!newData.raw_data.raw_data) newData.raw_data.raw_data = {}; // 確保結構
+                        if (!newData.raw_data.raw_data) newData.raw_data.raw_data = {}; 
                         newData.raw_data.raw_data[key] = value;
                     }
                     return newData;
                 });
             };
 
-            // 處理寵物欄位變更
             const handlePetChange = (petIdx, field, value) => {
                 setEditData(prev => {
                     const newData = { ...prev };
@@ -271,25 +295,91 @@
                 setIsEditing(false);
             };
 
-            // 渲染欄位 Helper (View/Edit 模式切換)
             const RenderField = ({ label, value, editPath, type = 'text' }) => (
                 <div className="mb-2">
                     <label className="text-[10px] font-bold text-gray-400 block mb-0.5">{label}</label>
                     {isEditing ? (
-                        <input 
-                            type={type} 
-                            value={value || ''} 
-                            onChange={(e) => handleEditChange(editPath, e.target.value)}
-                            className="admin-input"
-                        />
+                        <input type={type} value={value || ''} onChange={(e) => handleEditChange(editPath, e.target.value)} className="admin-input"/>
                     ) : (
                         <div className="font-bold text-soosi-dark text-sm break-words">{T(value)}</div>
                     )}
                 </div>
             );
 
-            // 讀取 raw_data 的安全方法
-            const getRaw = (key) => editData.raw_data?.raw_data?.[key] || editData.raw_data?.[key] || '';
+            // 🌟 價格明細顯示 Helper
+            const renderPriceDetails = () => {
+                const stayDuration = getRaw('stayDuration');
+                const pricePerNight = getRaw('price_per_night');
+                const holidaySurcharge = getRaw('holiday_surcharge');
+                const usePromo50 = getRaw('usePromo50');
+                
+                return (
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm space-y-2 mb-4">
+                        <div className="font-black text-gray-400 text-xs border-b border-gray-200 pb-2 mb-2 flex items-center gap-1">
+                            <Icon name="file-text" size={14}/> 費用明細 (唯讀參考)
+                        </div>
+                        
+                        {/* 住宿模式顯示 */}
+                        {isBoarding && (
+                            <>
+                                {stayDuration && pricePerNight && (
+                                    <div className="flex justify-between">
+                                        <span>🏠 住宿 ({stayDuration}晚)</span>
+                                        <span className="font-bold">${stayDuration * pricePerNight}</span>
+                                    </div>
+                                )}
+                                {holidaySurcharge && (
+                                    <div className="flex justify-between text-soosi-red">
+                                        <span>+ 假日/加價</span>
+                                        <span className="font-bold">${holidaySurcharge}</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* 寵物加購項目 */}
+                        {editData.booking_pets?.map((pet, idx) => {
+                            if (pet.add_grooming && pet.grooming_price) {
+                                return (
+                                    <div key={idx} className="flex justify-between text-soosi-green">
+                                        <span>✂️ {pet.pet_name} 美容/SPA</span>
+                                        <span className="font-bold">+ ${pet.grooming_price}</span>
+                                    </div>
+                                )
+                            }
+                            return null;
+                        })}
+
+                        {/* 優惠券 */}
+                        {usePromo50 && (
+                            <div className="flex justify-between text-soosi-red border-t border-dashed border-gray-200 pt-2">
+                                <span>✨ 50天回訪優惠</span>
+                                <span className="font-bold">- $200</span>
+                            </div>
+                        )}
+                        
+                        {/* 可編輯的總金額 */}
+                        <div className="border-t border-gray-300 pt-2 mt-2">
+                            <div className="flex justify-between items-center">
+                                <span className="font-black text-soosi-dark">應收總額</span>
+                                {isEditing ? (
+                                    <div className="flex items-center gap-1">
+                                        <span className="font-bold text-gray-400">$</span>
+                                        <input 
+                                            type="number" 
+                                            value={editData.total_price} 
+                                            onChange={(e) => handleEditChange('total_price', e.target.value)}
+                                            className="admin-input w-24 text-right font-black text-lg text-soosi-wood"
+                                        />
+                                    </div>
+                                ) : (
+                                    <span className="text-xl font-black text-soosi-wood">${editData.total_price}</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
 
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-soosi-dark/60 backdrop-blur-sm animate-in fade-in">
@@ -305,28 +395,32 @@
                                 <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">ID: {order.id.slice(0,8)}</p>
                             </div>
                             <div className="flex gap-2">
-                                {!isEditing ? (
-                                    <>
-                                        <button onClick={() => setShowAuth(true)} className="p-2 bg-gray-100 hover:bg-soosi-wood hover:text-white rounded-full transition-colors" title="編輯資料">
-                                            <Icon name="edit-2" size={18}/>
-                                        </button>
-                                        <button onClick={() => setShowDeleteAuth(true)} className="p-2 bg-red-50 hover:bg-red-500 hover:text-white text-red-400 rounded-full transition-colors" title="刪除訂單">
-                                            <Icon name="trash-2" size={18}/>
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-200 rounded-xl text-xs font-bold">取消</button>
-                                        <button onClick={saveChanges} className="px-4 py-2 bg-soosi-green text-white rounded-xl text-xs font-bold shadow-md">儲存變更</button>
-                                    </>
+                                {/* 權限控制：只有管理員能看到編輯按鈕，員工完全看不到 */}
+                                {user?.email === ADMIN_EMAIL && (
+                                    !isEditing ? (
+                                        <>
+                                            <button onClick={() => setIsEditing(true)} className="p-2 bg-gray-100 hover:bg-soosi-wood hover:text-white rounded-full transition-colors" title="進入編輯模式">
+                                                <Icon name="edit-2" size={18}/>
+                                            </button>
+                                            <button onClick={() => setShowDeleteAuth(true)} className="p-2 bg-red-50 hover:bg-red-500 hover:text-white text-red-400 rounded-full transition-colors" title="刪除訂單">
+                                                <Icon name="trash-2" size={18}/>
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-200 rounded-xl text-xs font-bold">放棄修改</button>
+                                            <button onClick={() => setShowAuth(true)} className="px-4 py-2 bg-soosi-green text-white rounded-xl text-xs font-bold shadow-md">確認並存檔</button>
+                                        </>
+                                    )
                                 )}
+                                {/* 關閉按鈕永遠顯示 */}
                                 <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors ml-2"><Icon name="x" size={24}/></button>
                             </div>
                         </div>
 
                         <div className="p-8 overflow-y-auto space-y-6">
-                            {/* 1. 狀態與店家備註 (所有人可編輯) */}
                             <div className="grid md:grid-cols-2 gap-4">
+                                {/* 狀態切換 */}
                                 <div className="bg-white p-5 rounded-3xl border border-soosi-green/10 shadow-sm">
                                     <label className="text-xs font-bold text-gray-400 mb-2 block">訂單狀態</label>
                                     <div className="flex flex-wrap gap-2">
@@ -344,6 +438,7 @@
                                         ))}
                                     </div>
                                 </div>
+                                {/* 店家備註 */}
                                 <div className="bg-white p-5 rounded-3xl border border-soosi-wood/10 shadow-sm relative group">
                                     <label className="text-xs font-bold text-soosi-wood mb-1 flex items-center gap-1">
                                         <Icon name="sticky-note" size={14}/> 店家備註 (內部用)
@@ -359,28 +454,32 @@
                                 </div>
                             </div>
 
-                            {/* 2. 完整飼主資訊 */}
+                            {/* 飼主與金額區塊 */}
                             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
                                 <h4 className="font-black text-soosi-dark mb-4 flex items-center gap-2 border-b border-dashed pb-2">
-                                    <Icon name="user" size={18}/> 飼主詳細資料
+                                    <Icon name="user" size={18}/> 飼主與款項
                                 </h4>
                                 <div className="grid md:grid-cols-3 gap-6">
-                                    <RenderField label="姓名" value={editData.owner_name} editPath="owner_name" />
-                                    <RenderField label="電話" value={editData.phone} editPath="phone" />
-                                    <RenderField label="Email" value={editData.email} editPath="email" />
-                                    <RenderField label="身分證字號" value={getRaw('owner_id')} editPath="raw_data.owner_id" />
-                                    <div className="md:col-span-2">
-                                        <RenderField label="地址" value={getRaw('address')} editPath="raw_data.address" />
+                                    <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                                        <RenderField label="姓名" value={editData.owner_name} editPath="owner_name" />
+                                        <RenderField label="電話" value={editData.phone} editPath="phone" />
+                                        <RenderField label="Email" value={editData.email} editPath="email" />
+                                        <RenderField label="身分證字號" value={getRaw('owner_id')} editPath="raw_data.owner_id" />
+                                        <div className="col-span-2">
+                                            <RenderField label="地址" value={getRaw('address')} editPath="raw_data.address" />
+                                        </div>
+                                        <RenderField label="緊急聯絡人" value={getRaw('emergency_name')} editPath="raw_data.emergency_name" />
+                                        <RenderField label="緊急電話" value={getRaw('emergency_phone')} editPath="raw_data.emergency_phone" />
                                     </div>
-                                    <RenderField label="緊急聯絡人" value={getRaw('emergency_name')} editPath="raw_data.emergency_name" />
-                                    <RenderField label="緊急電話" value={getRaw('emergency_phone')} editPath="raw_data.emergency_phone" />
+                                    
+                                    {/* 🌟 插入新的金額詳細區塊 */}
                                     <div className="md:col-span-1">
-                                        <RenderField label="總金額" value={editData.total_price} editPath="total_price" type="number" />
+                                        {renderPriceDetails()}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* 3. 完整寵物列表 */}
+                            {/* 寵物列表 */}
                             <div>
                                 <h4 className="font-black text-soosi-dark mb-4 flex items-center gap-2 ml-1">
                                     <Icon name="paw-print" size={20} className="text-soosi-wood"/> 
@@ -391,7 +490,6 @@
                                         <div key={idx} className="bg-white p-6 rounded-[2rem] border-2 border-soosi-green/10 shadow-sm relative">
                                             <div className="absolute top-4 right-4 text-[10px] text-gray-300 font-bold">#{idx + 1}</div>
                                             
-                                            {/* 基本資料 */}
                                             <div className="grid md:grid-cols-4 gap-4 mb-4 border-b border-dashed pb-4">
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-400">名字</label>
@@ -421,7 +519,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* 詳細問卷 (唯讀或編輯需更複雜結構，這裡展示全部資訊) */}
                                             <div className="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
                                                 <div className="space-y-2">
                                                     <div className="flex justify-between border-b border-gray-50 pb-1"><span className="text-gray-400 text-xs">個性/分離焦慮</span><span className="font-bold text-right">{pet.personality || '-'}</span></div>
@@ -441,7 +538,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* 服務內容 */}
                                             {pet.add_grooming && (
                                                 <div className="mt-4 bg-soosi-green/5 p-3 rounded-xl">
                                                     <div className="font-black text-soosi-green text-xs mb-2">加購美容項目 (${pet.grooming_price})</div>
@@ -457,7 +553,6 @@
                                 </div>
                             </div>
 
-                            {/* 簽名 */}
                             {order.signature_url && (
                                 <div className="text-center pt-4 border-t border-dashed border-gray-200">
                                     <label className="text-[10px] font-black text-gray-400 block mb-3 uppercase tracking-widest">客戶簽名 (Customer Signature)</label>
@@ -467,12 +562,11 @@
                         </div>
                     </div>
 
-                    {/* 權限驗證 Modal */}
                     <SecurityModal 
                         isOpen={showAuth} 
                         onClose={()=>setShowAuth(false)} 
-                        onConfirm={()=>setIsEditing(true)} 
-                        title="請輸入管理員密碼以編輯"
+                        onConfirm={saveChanges} 
+                        title="確認儲存變更"
                     />
                     <SecurityModal 
                         isOpen={showDeleteAuth} 
@@ -485,14 +579,13 @@
         };
 
         // --- 主 Dashboard ---
-        const Dashboard = () => {
-            const [activeTab, setActiveTab] = useState('grooming'); // grooming | boarding
+        const Dashboard = ({ user }) => {
+            const [activeTab, setActiveTab] = useState('grooming');
             const [orders, setOrders] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedOrder, setSelectedOrder] = useState(null);
             const [searchTerm, setSearchTerm] = useState('');
 
-            // 讀取訂單
             const fetchOrders = async () => {
                 setLoading(true);
                 const filterTypes = activeTab === 'grooming' ? ['grooming'] : ['boarding', 'daycare'];
@@ -506,7 +599,6 @@
                 setLoading(false);
             };
 
-            // 更新狀態
             const updateStatus = async (id, newStatus) => {
                 const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', id);
                 if (!error) {
@@ -515,7 +607,6 @@
                 }
             };
 
-            // 更新備註
             const updateNote = async (id, note) => {
                 const { error } = await supabase.from('bookings').update({ admin_note: note }).eq('id', id);
                 if (!error) {
@@ -523,7 +614,6 @@
                 }
             };
 
-            // 刪除訂單
             const deleteOrder = async (id) => {
                 const { error } = await supabase.from('bookings').delete().eq('id', id);
                 if (!error) {
@@ -535,18 +625,15 @@
                 }
             };
 
-            // 完整更新 (編輯模式)
             const updateFullOrder = async (updatedOrder) => {
-                // 1. 更新主表
                 const { error: mainError } = await supabase.from('bookings').update({
                     owner_name: updatedOrder.owner_name,
                     phone: updatedOrder.phone,
                     email: updatedOrder.email,
                     total_price: updatedOrder.total_price,
-                    raw_data: updatedOrder.raw_data // 更新 JSONB 結構
+                    raw_data: updatedOrder.raw_data 
                 }).eq('id', updatedOrder.id);
 
-                // 2. 更新寵物表 (簡化：逐一更新)
                 if (!mainError && updatedOrder.booking_pets) {
                     for (const pet of updatedOrder.booking_pets) {
                         await supabase.from('booking_pets').update({
@@ -561,7 +648,7 @@
 
                 if (!mainError) {
                     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-                    setSelectedOrder(updatedOrder); // 更新 Modal 顯示
+                    setSelectedOrder(updatedOrder); 
                     alert("資料已更新！");
                 } else {
                     alert("更新失敗：" + mainError.message);
@@ -589,7 +676,6 @@
                     </nav>
 
                     <main className="max-w-4xl mx-auto p-6 space-y-6">
-                        {/* 搜尋 */}
                         <div className="relative group">
                             <Icon name="search" size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-soosi-green transition-colors" />
                             <input 
@@ -601,7 +687,6 @@
                             />
                         </div>
 
-                        {/* 分頁 Tab */}
                         <div className="flex bg-white p-1.5 rounded-[1.5rem] shadow-sm border border-gray-100">
                             <button onClick={() => setActiveTab('grooming')} className={`flex-1 py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'grooming' ? 'bg-soosi-green text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>
                                 <Icon name="scissors" size={16}/> 洗澡美容
@@ -611,7 +696,6 @@
                             </button>
                         </div>
 
-                        {/* 訂單列表 */}
                         {loading ? (
                             <div className="py-20 text-center text-gray-400 font-black animate-pulse">載入資料中...</div>
                         ) : (
@@ -626,13 +710,26 @@
                                         
                                         <div className="flex justify-between items-start mb-3">
                                             <div>
-                                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                                                    {T(order.service_type)} 
-                                                    · {new Date(order.created_at).toLocaleDateString()}
+                                                {/* 🌟 1. 左上角改顯示預約日期 (check_in_date 或 booking_date) */}
+                                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                                    <span>{T(order.service_type)}</span>
+                                                    <span>·</span>
+                                                    <span>
+                                                        {['boarding', 'daycare'].includes(order.service_type) 
+                                                            ? `${order.check_in_date} ~ ${order.check_out_date?.slice(5)}` 
+                                                            : (order.booking_date || order.check_in_date || order.booking_time?.split('T')[0])}
+                                                    </span>
+                                                    {/* 寵物數量 Badge 移到這裡 */}
+                                                    {order.booking_pets?.length > 1 && 
+                                                        <span className="bg-soosi-wood/10 text-soosi-wood px-1.5 py-0.5 rounded-full">
+                                                            {order.booking_pets.length}隻
+                                                        </span>
+                                                    }
                                                 </div>
-                                                <div className="font-black text-xl text-soosi-dark flex items-center gap-2">
-                                                    {order.owner_name}
-                                                    {order.booking_pets?.length > 1 && <span className="text-[10px] bg-soosi-wood/10 text-soosi-wood px-2 py-0.5 rounded-full">{order.booking_pets.length}隻毛孩</span>}
+                                                
+                                                {/* 🌟 2. 標題改為寵物名字 (變大) */}
+                                                <div className="font-black text-2xl text-soosi-dark flex items-center gap-2">
+                                                    {order.booking_pets?.map(p => p.pet_name).join(', ')}
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -649,18 +746,19 @@
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-4 text-xs font-black text-gray-400">
+                                        {/* 🌟 3. 下方改顯示主人資訊 */}
+                                        <div className="flex items-center gap-4 text-xs font-bold text-gray-400 mt-2">
                                             <div className="flex items-center gap-1.5 text-soosi-green">
-                                                <Icon name="paw-print" size={14}/>
-                                                {order.booking_pets?.slice(0, 2).map(p => p.pet_name).join(', ')}
-                                                {order.booking_pets?.length > 2 && '...'}
+                                                <Icon name="user" size={14}/>
+                                                {order.owner_name}
                                             </div>
                                             <div className="flex items-center gap-1.5">
-                                                <Icon name="calendar" size={14}/>
-                                                {order.check_in_date || order.booking_date}
+                                                <Icon name="phone" size={14}/>
+                                                {order.phone}
                                             </div>
                                         </div>
-                                        {/* 列表顯示備註預覽 */}
+
+                                        {/* 備註預覽 */}
                                         {order.admin_note && (
                                             <div className="mt-3 pt-3 border-t border-dashed text-xs text-soosi-wood/80 truncate">
                                                 <span className="font-bold">📝 備註：</span>{order.admin_note}
@@ -674,6 +772,7 @@
                     </main>
 
                     <OrderModal 
+                        user={user}
                         order={selectedOrder} 
                         onClose={() => setSelectedOrder(null)} 
                         onUpdateStatus={updateStatus} 
@@ -691,31 +790,19 @@
                 supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
                 supabase.auth.onAuthStateChange((_event, session) => setSession(session));
             }, []);
-            return session ? <Dashboard /> : <LoginView onLogin={() => {}} />;
+            return session ? <Dashboard user={session.user} /> : <LoginView onLogin={() => {}} />;
         };
 
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
+    </script>
     <script>
-        // Admin Service Worker 自動更新腳本
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
-                    // 註冊 sw-admin.js
-                    const registration = await navigator.serviceWorker.register('./sw-admin.js?v=3');
-                    console.log('Admin Service Worker 註冊成功');
-
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing;
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('管理後台偵測到新版本，自動更新中...');
-                                window.location.reload();
-                            }
-                        });
-                    });
+                    const registration = await navigator.serviceWorker.register('./sw-admin.js?v=4');
+                    console.log('Admin SW 註冊成功');
                 } catch (error) {
-                    console.error('Admin Service Worker 註冊失敗:', error);
+                    console.error('Admin SW 註冊失敗:', error);
                 }
             });
         }

@@ -1019,7 +1019,8 @@ const handleApplyHistory = (record) => {
             address: record.address,
             owner_id: record.owner_id,
             emergency_name: record.emergency_name,
-            emergency_phone: record.emergency_phone
+            emergency_phone: record.emergency_phone,
+            owner_id: record.owner_id // 🌟 補上這行，身分證才會導入
         }));
         setLineConfirmed(true);
         setShowHistoryModal(false);
@@ -1681,7 +1682,17 @@ const newErrors = {};
     ]; 
     if (formData.pet_type === 'dog') required.push('social_play');
     required.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
-
+// 🌟 新增：如果有任何錯誤，就停止送出並顯示提示
+    if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        setIsSubmitting(false);
+        alert("⚠️ 請檢查紅字標示欄位是否填寫正確");
+        
+        // 自動捲動到第一個錯誤的地方
+        const firstErrorId = Object.keys(newErrors)[0];
+        document.getElementById(firstErrorId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return; 
+    }
     // --- 2. 年齡/月齡檢查 ---
     if (formData.is_under_one ? !formData.age_months : !formData.age) {
         newErrors[formData.is_under_one ? 'age_months' : 'age'] = '請填寫年齡';
@@ -3951,7 +3962,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
             window.addEventListener('load', async () => {
                 try {
 // 1. 註冊 Service Worker (更新至 v=)
-                    const registration = await navigator.serviceWorker.register('./sw.js?v=11');
+                    const registration = await navigator.serviceWorker.register('./sw.js?v=12');
                     console.log('Service Worker 註冊成功');
 
                     // 2. 監聽更新：當偵測到 sw.js 內容有變動時

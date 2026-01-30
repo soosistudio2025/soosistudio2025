@@ -8,7 +8,7 @@
 <title>宿洗寵物 Soosi Pet | 數位契約系統</title>
     
     <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="宿洗 Soosi">
     <link rel="apple-touch-icon" href="nav.png">
@@ -622,6 +622,7 @@ const InputGroup = ({ label, error, id, children, required = false }) => (
             {label} {required && <span className="text-red-500">*</span>}
         </label>
         {children}
+        {/* 🌟 只有這裡有 error 且不為空時，紅字才會出現 */}
         {error && <div className="field-error"><Icon name="alert-circle" size={12}/>{error}</div>}
     </div>
 );
@@ -1085,8 +1086,6 @@ const handleApplyHistory = (record) => {
             addGrooming: '',
             bookingDate: '',
             bookingTime: '',
-            checkInDate: '',
-            checkOutDate: '',
             estimated_price: '',
             price_per_night: '',
             holiday_surcharge: '',
@@ -1476,7 +1475,6 @@ const handleDeletePet = (e, idx) => {
 // --- 更新：自動偵測優惠資格 (Debug 偵錯版) ---
     useEffect(() => {
         const checkLoyalty = async () => {
-            console.log("🔍 [1] 優惠檢查流程啟動...");
             console.log("📊 [1-1] 當前表單狀態:", {
                 phone: formData.phone,
                 pet_name: formData.pet_name,
@@ -1706,100 +1704,132 @@ if (data) {
             }, [showFullSig]);
 
 const handleSubmit = async () => {
-    // 0. 提交前，強制存回當前寵物資料
-    let finalPetList = [];
-    setPetList(prev => {
-        const newList = [...prev];
-        const currentPetData = {};
-        PET_SPECIFIC_FIELDS.forEach(field => { currentPetData[field] = formData[field]; });
-        newList[currentPetIdx] = { ...newList[currentPetIdx], ...currentPetData };
-        finalPetList = newList; 
-        return newList;
-    });
-    
-    await new Promise(r => setTimeout(r, 50)); // 等待狀態更新
+    // 1. 手動建立「最新寵物清單」進行驗證，確保拿到當前畫面輸入的值
+    const currentPetData = {};
+    PET_SPECIFIC_FIELDS.forEach(field => { currentPetData[field] = formData[field]; });
+    const petListToValidate = petList.map((p, i) => i === currentPetIdx ? { ...p, ...currentPetData } : p);
 
-// 1. 先將當前正在編輯的寵物資料同步回列表
-        saveCurrentPetToState(currentPetIdx);
+    const newErrors = {};
+    const dataToValidate = { ...formData, estimated_price: calculatedTotalPrice };
 
-        const newErrors = {};
+    // --- A. 必填驗證開始 ---
+    const sharedRequired = ['email', 'owner_name', 'phone', 'image_auth'];
+    if (isBoarding) {
+        sharedRequired.push('owner_id', 'address', 'emergency_name', 'emergency_phone');
+        if (!formData.checkInDate) newErrors.checkInDate = '請選擇日期';
+        if (!formData.isDaycare && !formData.checkOutDate) newErrors.checkOutDate = '請選擇日期';
+    } else {
+        sharedRequired.push('bookingDate', 'bookingTime');
+    }
+    sharedRequired.forEach(f => { if(!dataToValidate[f]) newErrors[f] = '此欄位為必填'; });
+    if (!calculatedTotalPrice || calculatedTotalPrice <= 0) newErrors.estimated_price = '金額不可為 0';
 
-        // 🌟 2. 共享欄位檢查 (飼主資訊、日期、金額)
-        // 這些是整張訂單共用的，只要填一次
-        const sharedRequired = ['email', 'owner_name', 'phone', 'image_auth'];
+    petListToValidate.forEach((pet, index) => {
+        const suffix = `_${index}`;
+        const petLabel = `第 ${index + 1} 隻(${pet.pet_name || '未命名'})：`;
+        const petBasic = ['pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'medical_status', 'social_aggression'];
+        if (pet.pet_type === 'dog') petBasic.push('social_play');
+        petBasic.forEach(f => { if(!pet[f]) newErrors[`${f}${suffix}`] = `${petLabel}必填`; });
+        if (pet.is_under_one ? !pet.age_months : !pet.age) newErrors[`${pet.is_under_one ? 'age_months' : 'age'}${suffix}`] = `${petLabel}請填寫年齡`;
         if (isBoarding) {
-            sharedRequired.push('owner_id', 'address', 'emergency_name', 'emergency_phone', 'estimated_price');
-            if (!formData.checkInDate) newErrors.checkInDate = '請選擇日期';
-            if (!formData.isDaycare && !formData.checkOutDate) newErrors.checkOutDate = '請選擇日期';
+            ['chip_status', 'personality', 'pica', 'feeding_plan'].forEach(f => { if(!pet[f]) newErrors[`${f}${suffix}`] = `${petLabel}必填`; });
+            if(!pet.diet_type || pet.diet_type.length === 0) newErrors[`diet_type${suffix}`] = `${petLabel}請勾選飲食`;
         } else {
-            sharedRequired.push('bookingDate', 'bookingTime', 'estimated_price');
+            if (!pet.service_items || pet.service_items.length === 0) newErrors[`service_items${suffix}`] = `${petLabel}請選擇服務內容`;
         }
-        sharedRequired.forEach(f => { if(!formData[f]) newErrors[f] = '此欄位為必填'; });
+    });
 
-        // 🌟 3. 毛孩個別欄位檢查 (迴圈掃描每一隻寵物)
-        petList.forEach((pet, index) => {
-            const petLabel = petList.length > 1 ? `第 ${index + 1} 隻毛孩(${pet.pet_name || '未命名'})：` : '';
-            const suffix = `_${index}`; // 用於標記錯誤位置
+    let targetPetIdx = currentPetIdx;
+    const firstErrorKey = Object.keys(newErrors)[0];
+    if (firstErrorKey && firstErrorKey.includes('_')) targetPetIdx = parseInt(firstErrorKey.split('_').pop());
+    Object.keys(newErrors).forEach(key => { if (key.endsWith(`_${targetPetIdx}`)) newErrors[key.replace(`_${targetPetIdx}`, '')] = newErrors[key]; });
 
-            // 基本身分資料
-            const petBasic = ['pet_name', 'breed', 'weight', 'sex', 'fix', 'grooming_temperament', 'medical_status', 'social_aggression'];
-            if (pet.pet_type === 'dog') petBasic.push('social_play');
-            petBasic.forEach(f => { if(!pet[f]) newErrors[`${f}${suffix}`] = `${petLabel}必填`; });
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+        if (targetPetIdx !== currentPetIdx) handleSwitchPet(targetPetIdx);
+        alert(firstErrorKey === 'image_auth' ? '⚠️「影像使用授權」尚未勾選喔！' : `⚠️ 還有欄位未填齊，已標記為紅色。`);
+        setTimeout(() => { document.getElementById(firstErrorKey.split('_')[0])?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+        return; 
+    }
+    // --- B. 驗證結束，開始傳送資料 ---
 
-            // 年齡檢查
-            if (pet.is_under_one ? !pet.age_months : !pet.age) {
-                newErrors[`${pet.is_under_one ? 'age_months' : 'age'}${suffix}`] = `${petLabel}請填寫年齡`;
-            }
+    setIsSubmitting(true);
+    try {
+        // 1. 上傳數位簽名圖檔
+        const sigFile = dataURLtoFile(realtimeSig, `sig_${Date.now()}.png`);
+        const { data: sigData, error: sigError } = await supabase.storage
+            .from('signatures')
+            .upload(`${Date.now()}_${Math.random().toString(36).substring(7)}.png`, sigFile);
+        if (sigError) throw sigError;
+        const { data: { publicUrl: signature_url } } = supabase.storage.from('signatures').getPublicUrl(sigData.path);
 
-            // 模式特定檢查
-            if (isBoarding) {
-                // 住宿/安親專用
-                if(!pet.chip_status) newErrors[`chip_status${suffix}`] = `${petLabel}必填`;
-                if(!pet.personality) newErrors[`personality${suffix}`] = `${petLabel}必填`;
-                if(!pet.pica) newErrors[`pica${suffix}`] = `${petLabel}請選擇異食狀況`;
-                if(!pet.diet_type || pet.diet_type.length === 0) newErrors[`diet_type${suffix}`] = `${petLabel}請勾選飲食習慣`;
-                if(!pet.feeding_plan) newErrors[`feeding_plan${suffix}`] = `${petLabel}請填寫餵食說明`;
+        // 2. 準備傳送給資料庫的最終物件
+        const finalSubmitData = {
+            p_owner_data: { 
+                owner_name: formData.owner_name, 
+                phone: formData.phone, 
+                email: formData.email 
+            },
+            p_pet_data: petListToValidate, // 傳送包含所有毛孩的清單
+            p_contract_data: { 
+                ...formData, 
+                estimated_price: calculatedTotalPrice, 
+                signature_url,
+                petList: petListToValidate // 備份完整的 JSON 給後台使用
+            },
+            p_is_boarding: isBoarding
+        };
 
-                // 狗狗住宿強制試住檢查 (排除安親)
-                if (pet.pet_type === 'dog' && !formData.isDaycare) {
-                    if (pet.hasTrialStay !== true) {
-                        alert(`⛔ 無法提交！\n\n${petLabel}住宿前必須先完成安親試住。`);
-                        throw new Error("試住驗證未通過"); // 中斷執行
-                    }
-                    ['isBarking', 'isFoodGuarding', 'useToiletPad'].forEach(f => { if(!pet[f]) newErrors[`${f}${suffix}`] = `必填`; });
-                    if(!pet.crateTraining || pet.crateTraining.length === 0) newErrors[`crateTraining${suffix}`] = `必填`;
-                } else if (pet.pet_type === 'cat') {
-                    if(!pet.litter_type) newErrors[`litter_type${suffix}`] = `${petLabel}請選擇貓砂習慣`;
-                }
-            } else {
-                // 美容模式：檢查項目
-                if (!pet.service_items || pet.service_items.length === 0) {
-                    newErrors[`service_items${suffix}`] = `${petLabel}請選擇服務內容`;
-                }
-            }
-        });
+        // 3. 呼叫 Supabase RPC
+        const { data, error: rpcError } = await supabase.rpc('submit_form_data', finalSubmitData);
+        if (rpcError) throw rpcError;
 
-        // 🌟 4. 執行攔截、報錯與自動分頁跳轉
-        setErrors(newErrors);
-        if (Object.keys(newErrors).length > 0) {
-            const firstErrorKey = Object.keys(newErrors)[0];
-            const match = firstErrorKey.match(/_(\d+)$/);
-            
-            if (match) {
-                const errorIdx = parseInt(match[1]);
-                handleSwitchPet(errorIdx); // 🚀 自動跳轉到有錯誤的那一隻寵物頁面
-                alert(`⚠️ 還有欄位未填齊：\n${newErrors[firstErrorKey]}`);
-            } else {
-                alert(`⚠️ 請檢查：${newErrors[firstErrorKey]}`);
-            }
-            
-            // 捲動到錯誤位置
-            document.getElementById(firstErrorKey)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return; 
-        }
+// 4. 提交成功後的處理
+        alert("🎉 契約提交成功！我們已收到您的資料，期待與毛孩見面！");
+        
+        // 🌟 核心修正：延遲 2.5 秒再執行重置與導航，讓使用者有足夠時間閱讀 Toast
+        await new Promise(resolve => setTimeout(resolve, 2500));
 
-        setIsSubmitting(true);
-            };
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        goHome(); 
+        
+        // 延後 0.5 秒再清空資料，確保畫面切換回首頁後才在背景重置，視覺上最順暢
+        setTimeout(() => {
+            setPetList([{ id: 0, name: '寵物 1' }]);
+            setCurrentPetIdx(0);
+            setRealtimeSig(null);
+            setFormData({
+                email: '', owner_name: '', phone: '', owner_id: '', address: '',
+                emergency_name: '', emergency_phone: '',
+                pet_name: '', breed: '', weight: '', 
+                age: '', age_months: '', is_under_one: false,
+                sex: '', fix: '', 
+                social_aggression: '', social_play: '', 
+                grooming_temperament: '',
+                chip_status: '', chip_id: '', preferred_clinic: '',
+                medical_status: '', medical_history: [], medical_history_other: '',
+                service_type: '', service_type_other: '', legal_agree: false,
+                service_items: [], 
+                service_items_other: '', 
+                estimated_price: '',
+                hasTrialStay: false,
+                pet_type: 'dog', 
+                isDaycare: false,
+                bookingTimeEnd: '',
+                usePromo50: false,
+                image_auth: '',
+            });
+            setLineConfirmed(false);
+            setLoyaltyInfo(null);
+        }, 500);
+
+    } catch (err) {
+        console.error("提交失敗詳情:", err);
+        alert(`❌ 提交失敗：${err.message || '請檢查網路後再試一次'}`);
+    } finally {
+        setIsSubmitting(false); // 🌟 關鍵：無論成功或失敗，都要停止轉圈
+    }
+};
 
             // 🌟 優化：提取總金額計算邏輯 (避免顯示與實際提交金額不一致)
 const calculatedTotalPrice = useMemo(() => {
@@ -3353,7 +3383,7 @@ return allServices.map((item) => (
                                 </div>
                             </div>
 {/* 🌟 新增：影像使用授權 */}
-<div className="cute-card p-5 border-2 border-soosi-wood/20 bg-white">
+<div id="image_auth" className={`cute-card p-5 border-2 bg-white transition-all ${errors.image_auth ? 'border-red-400 bg-red-50 ring-4 ring-red-50' : 'border-soosi-wood/20'}`}>
     <label className="text-sm font-bold text-soosi-dark flex items-start gap-2 mb-3">
         <Icon name="camera" size={18} className="text-soosi-wood mt-0.5"/>
         <div>
@@ -3894,7 +3924,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
             window.addEventListener('load', async () => {
                 try {
 // 1. 註冊 Service Worker (更新至 v=)
-                    const registration = await navigator.serviceWorker.register('./sw.js?v=14');
+                    const registration = await navigator.serviceWorker.register('./sw.js?v=15');
                     console.log('Service Worker 註冊成功');
 
                     // 2. 監聽更新：當偵測到 sw.js 內容有變動時

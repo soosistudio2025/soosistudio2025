@@ -1,4 +1,4 @@
-const CACHE_NAME = 'soosi-pet-v2';
+const CACHE_NAME = 'soosi-pet-v1';
 const ASSETS_TO_CACHE = [
   './index.html',
   './nav.png',
@@ -39,6 +39,4 @@ self.addEventListener('fetch', (event) => {
       return response || fetch(event.request);
     })
   );
-
 });
-

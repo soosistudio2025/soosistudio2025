@@ -139,19 +139,25 @@
 
             if (!isOpen) return null;
 
-            const handleVerify = async () => {
+const handleVerify = async () => {
                 setVerifying(true);
                 try {
-                    // 🌟 核心：透過重新登入來驗證目前使用者的密碼
-                    const { data: { user } } = await supabase.auth.getUser();
-                    const { error } = await supabase.auth.signInWithPassword({
-                        email: user.email,
+                    // 🌟 核心修正：先檢查當前登入狀態，避免 user 為空導致報錯
+                    const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+                    
+                    if (userError || !currentUser) {
+                        throw new Error("驗證失敗：登入資訊已過期，請重新整理頁面。");
+                    }
+
+                    // 使用獲取到的 currentUser.email 進行二段驗證
+                    const { error: loginError } = await supabase.auth.signInWithPassword({
+                        email: currentUser.email,
                         password: pwd,
                     });
 
-                    if (error) throw new Error("密碼錯誤，驗證失敗");
+                    if (loginError) throw new Error("密碼錯誤，驗證失敗");
                     
-                    onConfirm(); // 驗證通過，執行後續動作
+                    onConfirm(); // 驗證通過，執行刪除或儲存動作
                     setPwd("");
                     onClose();
                 } catch (err) {
@@ -295,12 +301,24 @@
 
             const saveChanges = () => { onUpdateFullOrder(editData); setIsEditing(false); };
 
-            const formatAge = (pet) => {
-                if (pet.is_under_one || pet.age < 1) {
-                    const months = Math.round(pet.age * 12);
-                    return <span className="text-soosi-accent font-bold">{months} 個月</span>;
+const formatAge = (pet) => {
+                const ageVal = pet.age;
+                // 1. 處理無資料或 null 的情況
+                if (ageVal === null || ageVal === undefined || ageVal === '') return '-';
+
+                const ageNum = parseFloat(ageVal);
+                
+                // 2. 判斷是否未滿一歲 (或是 age 數值小於 1)
+                // 註：資料庫小數點 0.0833 = 1個月, 0.5 = 6個月
+                if (pet.is_under_one || ageNum < 1) {
+                    const months = Math.round(ageNum * 12);
+                    // 確保如果大於 0 但算出來是 0 (極小數)，也至少顯示 1 個月
+                    const displayMonths = (months === 0 && ageNum > 0) ? 1 : months;
+                    return <span className="text-soosi-accent font-bold">{displayMonths} 個月</span>;
                 }
-                return `${pet.age} 歲`;
+                
+                // 3. 超過一歲直接顯示歲數
+                return `${ageNum} 歲`;
             };
 
             const getPetTypeLabel = (pet) => {
@@ -310,54 +328,106 @@
             
             const getVal = (pet, key) => pet[key] || getRaw(key);
 
-            // 價格明細顯示 Helper
+// 價格明細顯示 Helper (修復 ReferenceError 並帶入寵物名稱)
             const renderPriceDetails = () => {
-                const stayDuration = getRaw('stayDuration');
-                const pricePerNight = getRaw('price_per_night');
-                const holidaySurcharge = getRaw('holiday_surcharge');
-                const usePromo50 = getRaw('usePromo50');
+                const pricePerNight = parseInt(getRaw('price_per_night') || 0);
+                const holidaySurcharge = parseInt(getRaw('holiday_surcharge') || 0);
+                
+                // 1. 自動計算住宿天數 (避免天數消失)
+                let stayDuration = parseInt(getRaw('stayDuration') || 0);
+                if (!stayDuration && order.check_in_date && order.check_out_date) {
+                    const start = new Date(order.check_in_date);
+                    const end = new Date(order.check_out_date);
+                    stayDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+                }
                 
                 return (
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm space-y-2 mb-4">
                         <div className="font-black text-gray-400 text-xs border-b border-gray-200 pb-2 mb-2 flex items-center gap-1">
                             <Icon name="file-text" size={14}/> 費用明細
                         </div>
-                        {isBoarding && (
+
+                        {/* --- 1. 住宿/安親項目 --- */}
+                        {isBoarding && stayDuration > 0 && pricePerNight > 0 && (
                             <>
-                                {stayDuration && pricePerNight && (
-                                    <div className="flex justify-between">
-                                        <span>🏠 住宿 ({stayDuration}晚)</span>
-                                        <span className="font-bold">${stayDuration * pricePerNight}</span>
+                                <div className="flex justify-between">
+                                    <span>🏠 住宿 ({stayDuration}晚)</span>
+                                    <span className="font-bold">${stayDuration * pricePerNight}</span>
+                                </div>
+                                {stayDuration >= 6 && (
+                                    <div className="flex justify-between text-soosi-green text-xs italic">
+                                        <span>└ {stayDuration >= 15 ? '長住優惠 (85折)' : '長住優惠 (95折)'}</span>
+                                        <span>- ${Math.round(stayDuration * pricePerNight * (stayDuration >= 15 ? 0.15 : 0.05))}</span>
                                     </div>
                                 )}
-                                {holidaySurcharge && (
+                                {holidaySurcharge > 0 && (
                                     <div className="flex justify-between text-soosi-red">
-                                        <span>+ 假日/加價</span>
+                                        <span>+ 假日/特殊加價</span>
                                         <span className="font-bold">${holidaySurcharge}</span>
                                     </div>
                                 )}
                             </>
                         )}
+
+                        {/* --- 2. 美容與 SPA 項目 --- */}
                         {editData.booking_pets?.map((pet, idx) => {
-                            if (pet.add_grooming && pet.boarding_grooming_price) {
+                            const hasGrooming = isBoarding ? pet.add_grooming : true;
+                            const gPrice = parseInt(pet.grooming_price || 0);
+                            
+                            if (hasGrooming) {
                                 return (
-                                    <div key={idx} className="flex justify-between text-soosi-green">
-                                        <span>✂️ {pet.pet_name} 美容</span>
-                                        <span className="font-bold">+ ${pet.boarding_grooming_price}</span>
+                                    <div key={idx} className="pt-1 border-t border-dashed border-gray-200 mt-1">
+                                        <div className="flex justify-between text-soosi-dark font-black text-xs mb-1">
+                                            <span>✂️ {pet.pet_name} 服務項目</span>
+                                            {isBoarding && <span className="text-soosi-green font-bold">+ ${gPrice}</span>}
+                                        </div>
+                                        <div className="pl-4 space-y-0.5">
+                                            {(pet.service_items || []).map((item, i) => (
+                                                <div key={i} className="text-[11px] text-gray-500">• {T(item)}</div>
+                                            ))}
+                                            {getRaw('service_items_other') && (
+                                                <div className="text-[11px] text-gray-400 italic">• 備註: {getRaw('service_items_other')}</div>
+                                            )}
+                                        </div>
                                     </div>
-                                )
+                                );
                             }
                             return null;
                         })}
-                        {usePromo50 && (
-                            <div className="flex justify-between text-soosi-red border-t border-dashed border-gray-200 pt-2">
-                                <span>✨ 50天回訪優惠</span>
-                                <span className="font-bold">- $200</span>
-                            </div>
-                        )}
+
+                        {/* --- 3. 優惠折抵 (解決 ReferenceError 並顯示寵物名) --- */}
+                        {(() => {
+                            // 找出有勾選優惠的寵物 (支援資料庫與舊資料格式)
+                            const promoPets = editData.booking_pets?.filter(p => 
+                                p.use_promo_50 === true || p.use_promo_50 === 'true' || 
+                                p.usePromo50 === true || p.usePromo50 === 'true'
+                            ) || [];
+                            
+                            // 檢查整單是否有優惠標記
+                            const isOrderPromo = (getRaw('usePromo50') === true || getRaw('usePromo50') === 'true') || 
+                                               (getRaw('use_promo_50') === true || getRaw('use_promo_50') === 'true');
+                            
+                            if (promoPets.length > 0 || isOrderPromo) {
+                                const names = promoPets.map(p => p.pet_name).filter(Boolean).join('、');
+                                const label = names ? `(${names}) 50天優惠` : `50天優惠`;
+                                const totalDiscount = promoPets.length > 0 ? (promoPets.length * 200) : 200;
+
+                                return (
+                                    <div className="flex justify-between text-soosi-red border-t border-dashed border-gray-200 pt-2 font-bold animate-pulse">
+                                        <span className="flex items-center gap-1">
+                                            <Icon name="sparkles" size={12}/> {label}
+                                        </span>
+                                        <span>- ${totalDiscount}</span>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
+
+                        {/* --- 4. 總額 --- */}
                         <div className="border-t border-gray-300 pt-2 mt-2">
                             <div className="flex justify-between items-center">
-                                <span className="font-black text-soosi-dark">應收總額</span>
+                                <span className="font-black text-soosi-dark text-base">應收總額</span>
                                 {isEditing ? (
                                     <div className="flex items-center gap-1">
                                         <span className="font-bold text-gray-400">$</span>
@@ -659,12 +729,12 @@
                                 </div>
                             </div>
 
-                            {/* 簽名與時間 */}
+{/* 簽名與時間 (修正顏色為深色以提升辨識度) */}
                             {order.signature_url && (
                                 <div className="text-center pt-4 border-t border-dashed border-gray-200">
-                                    <label className="text-[10px] font-black text-gray-400 block mb-2 uppercase tracking-widest">客戶數位簽署</label>
+                                    <label className="text-[10px] font-black text-soosi-dark/50 block mb-2 uppercase tracking-widest">客戶數位簽署</label>
                                     <img src={order.signature_url} className="h-24 mx-auto opacity-80 mix-blend-multiply" />
-                                    <div className="text-[10px] text-gray-300 font-bold mt-2 font-mono">
+                                    <div className="text-[11px] text-soosi-dark font-black mt-2 font-mono">
                                         簽署時間：{new Date(order.created_at).toLocaleString('zh-TW', {hour12: false})}
                                     </div>
                                 </div>
@@ -1189,7 +1259,8 @@ const CalendarView = ({ orders, onSelectOrder }) => {
                                         {/* 🌟 寵物條清單 (限制顯示前3筆，其餘顯示 +更多) */}
                                         <div className="space-y-0.5 overflow-hidden">
                                             {petsInDay.slice(0, 3).map(o => (
-                                                <div key={o.id} className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm truncate text-white shadow-sm ${o.service_type === 'grooming' ? 'bg-blue-400' : 'bg-orange-400'}`}>
+<div key={o.id} className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm truncate text-white shadow-sm ${o.service_type === 'grooming' ? 'bg-blue-400' : 'bg-orange-400'}`}>
+                                                    {o.service_type === 'grooming' && o.booking_time && <span className="opacity-80">[{o.booking_time}] </span>}
                                                     {o.booking_pets?.map(p => p.pet_name).join(',')}
                                                 </div>
                                             ))}
@@ -1219,7 +1290,7 @@ const CalendarView = ({ orders, onSelectOrder }) => {
                                         <div className={`w-1.5 h-10 rounded-full ${o.service_type === 'grooming' ? 'bg-blue-400' : 'bg-orange-400'}`}></div>
                                         <div>
                                             <div className="font-black text-soosi-dark text-base">{o.booking_pets?.map(p => p.pet_name).join(', ')}</div>
-                                            <div className="text-[10px] text-gray-400 font-bold">{o.owner_name} · {o.service_type === 'grooming' ? '✂️ 美容服務' : '🏠 住宿/安親'}</div>
+<div className="text-[10px] text-gray-400 font-bold">{o.owner_name} · {o.service_type === 'grooming' ? `✂️ 美容 (${o.booking_time})` : '🏠 住宿/安親'}</div>
                                         </div>
                                     </div>
                                     <Icon name="chevron-right" size={16} className="text-gray-300 group-hover:text-soosi-green transition-transform group-hover:translate-x-1" />
@@ -1472,9 +1543,9 @@ const CalendarView = ({ orders, onSelectOrder }) => {
                                                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
                                                         <span className="flex items-center gap-1">
                                                             <Icon name="calendar" size={12} className="mb-0.5"/>
-                                                            {['boarding', 'daycare'].includes(order.service_type) 
+{['boarding', 'daycare'].includes(order.service_type) 
                                                                 ? `${order.check_in_date} ~ ${order.check_out_date?.slice(5)}` 
-                                                                : (order.booking_date || order.check_in_date || order.booking_time?.split('T')[0])}
+                                                                : `${order.booking_date || order.check_in_date || order.booking_time?.split('T')[0]} ${order.booking_time || ''}`}
                                                         </span>
                                                         {order.booking_pets?.length > 1 && 
                                                             <span className="bg-soosi-wood/10 text-soosi-wood px-1.5 py-0.5 rounded-full ml-1">
@@ -1586,7 +1657,7 @@ const CalendarView = ({ orders, onSelectOrder }) => {
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
-                    const registration = await navigator.serviceWorker.register('./sw-admin.js?v=11');
+                    const registration = await navigator.serviceWorker.register('./sw-admin.js?v=12');
                     console.log('Admin SW 註冊成功');
                 } catch (error) {
                     console.error('Admin SW 註冊失敗:', error);
